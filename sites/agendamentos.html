@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Barbear Prime | Agenda do Barbeiro</title>
+<link rel="manifest" href="../manifest.json">
+<meta name="theme-color" content="#1A1613">
+<link rel="apple-touch-icon" href="../assets/img/icon-192.png">
+<link rel="icon" href="../assets/img/icon-192.png">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link rel="stylesheet" href="../assets/css/style.css">
+<script>!function(){var t=sessionStorage.getItem("bp-tema"),e=sessionStorage.getItem("bp-escala-fonte");t&&document.documentElement.setAttribute("data-tema",t);e&&document.documentElement.style.setProperty("--escala-fonte",e);}();</script>
+<!-- Ver comentário equivalente em painel-barbeiro.html: a proteção real
+     desta rota é protegerRotaEquipe() em ui.js. O guard antigo baseado em
+     localStorage["bp_sessao"] foi removido por bater sempre em falso. -->
+</head>
+<body data-pagina-atual="agenda">
+
+<div class="app-shell">
+  <div class="toast-prime" id="toastPrime"></div>
+
+  <div class="header-marca">
+    <img class="selo-barbear" src="../assets/img/logo-header.png" alt="Emblema da Barbear Prime" style="object-fit:cover;">
+    <h1 class="titulo-marca">Agenda do Barbeiro</h1>
+
+    <nav class="nav-desktop" aria-label="Navegação principal">
+      <a href="painel-barbeiro.html" class="nav-link-desktop"><i class="bi bi-house-door"></i> Início</a>
+      <a href="agendamentos.html" class="nav-link-desktop ativo" aria-current="page"><i class="bi bi-calendar3"></i> Agenda</a>
+      <a href="perfil.html" class="nav-link-desktop"><i class="bi bi-person"></i> Perfil</a>
+    </nav>
+    <button class="btn-hamburguer-mobile" id="btnHamburguer" aria-label="Abrir menu" aria-expanded="false" aria-controls="menuHamburguerPainel">
+      <i class="bi bi-list"></i>
+    </button>
+  </div>
+
+  <div class="menu-hamburguer-painel" id="menuHamburguerPainel">
+    <div class="menu-hamburguer-conteudo">
+      <a href="painel-barbeiro.html"><i class="bi bi-house-door"></i> Início</a>
+      <a href="agendamentos.html" class="ativo"><i class="bi bi-calendar3"></i> Agenda</a>
+      <a href="preferencias-app.html"><i class="bi bi-gear"></i> Ajustes</a>
+    </div>
+  </div>
+
+  <div class="tela-conteudo">
+    <div class="scroll-y flex-grow-1 container-site pt-3" style="max-width:640px;">
+
+      <p class="small texto-suave mb-3">Aqui você marca, remarca e desmarca os atendimentos dos clientes.</p>
+
+      <h2 class="fs-6 fw-bold mb-2">Selecione o dia</h2>
+      <div class="card-prime card-calendario p-3 mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <button class="btn btn-sm btn-light" id="agendaBtnMesAnterior" aria-label="Mês anterior"><i class="bi bi-chevron-left"></i></button>
+          <strong class="fs-6" id="agendaCalendarioMesAno">...</strong>
+          <button class="btn btn-sm btn-light" id="agendaBtnMesProximo" aria-label="Próximo mês"><i class="bi bi-chevron-right"></i></button>
+        </div>
+        <div class="calendario-mini" id="agendaCalendarioGrid">
+          <table>
+            <caption class="visually-hidden">Calendário para escolha do dia da agenda</caption>
+            <thead><tr><th scope="col">D</th><th scope="col">S</th><th scope="col">T</th><th scope="col">Q</th><th scope="col">Q</th><th scope="col">S</th><th scope="col">S</th></tr></thead>
+            <tbody id="agendaCalendarioCorpo">
+              <!-- preenchido dinamicamente pelo ui.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <ul class="nav nav-pills nav-fill mb-3 small" id="agendaBarbeiroAbas">
+        <li class="nav-item"><button class="nav-link active" data-aba-agenda="dia">Do dia</button></li>
+        <li class="nav-item"><button class="nav-link" data-aba-agenda="pendentes">Pendentes</button></li>
+        <li class="nav-item"><button class="nav-link" data-aba-agenda="historico">Histórico</button></li>
+      </ul>
+
+      <p class="small fw-bold texto-dourado mb-2" id="agendaBarbeiroTituloDia">Agenda local</p>
+
+      <div id="listaAgendaBarbeiro">
+        <!-- preenchido dinamicamente pelo ui.js a partir de window.db -->
+      </div>
+    </div>
+
+    <div class="container-site pb-2 d-flex gap-2 flex-wrap justify-content-center" style="max-width:640px;">
+      <button type="button" class="btn-prime text-center flex-grow-1" style="max-width:320px;" id="btnNovoAgendamentoBarbeiro" data-bs-toggle="modal" data-bs-target="#modalNovoAgendamentoBarbeiro"><i class="bi bi-plus-lg me-1"></i> Novo agendamento</button>
+      <button type="button" class="btn-outline-prime text-center flex-grow-1" style="max-width:320px;" id="btnDiaDeFolga" data-bs-toggle="modal" data-bs-target="#modalDiaDeFolga"><i class="bi bi-moon-stars me-1"></i> Dia de folga</button>
+    </div>
+  </div>
+
+  <!-- Modal: novo agendamento (equipe) -->
+  <div class="modal fade" id="modalNovoAgendamentoBarbeiro" tabindex="-1" aria-labelledby="modalNovoAgendamentoTitulo" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content modal-prime">
+        <form id="formNovoAgendamentoBarbeiro" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title fs-5 fonte-display" id="modalNovoAgendamentoTitulo">Novo agendamento</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label for="novoAgendamentoCliente" class="form-label small fw-semibold">Cliente</label>
+              <input type="text" class="input-prime" id="novoAgendamentoCliente" placeholder="Nome do cliente" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Serviços</label>
+              <div class="lista-check-servicos" id="novoAgendamentoServicos" role="group" aria-label="Serviços do agendamento">
+                <!-- preenchido dinamicamente pelo ui.js a partir de window.db.getServicos() -->
+              </div>
+              <p class="small texto-suave mt-1 mb-0" id="novoAgendamentoServicosTotal"></p>
+            </div>
+            <div class="d-flex gap-2 mb-3">
+              <div class="flex-grow-1">
+                <label for="novoAgendamentoData" class="form-label small fw-semibold">Data</label>
+                <input type="date" class="input-prime" id="novoAgendamentoData" required>
+              </div>
+              <div class="flex-grow-1">
+                <label for="novoAgendamentoHora" class="form-label small fw-semibold">Horário</label>
+                <select class="input-prime" id="novoAgendamentoHora" required>
+                  <!-- preenchido dinamicamente conforme a data escolhida -->
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-outline-prime" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn-prime text-center">Salvar agendamento</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: remarcar agendamento -->
+  <div class="modal fade" id="modalRemarcarAgendamento" tabindex="-1" aria-labelledby="modalRemarcarTitulo" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content modal-prime">
+        <form id="formRemarcarAgendamento" novalidate>
+          <input type="hidden" id="remarcarAgendamentoId">
+          <div class="modal-header">
+            <h2 class="modal-title fs-5 fonte-display" id="modalRemarcarTitulo">Remarcar agendamento</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="d-flex gap-2">
+              <div class="flex-grow-1">
+                <label for="remarcarData" class="form-label small fw-semibold">Nova data</label>
+                <input type="date" class="input-prime" id="remarcarData" required>
+              </div>
+              <div class="flex-grow-1">
+                <label for="remarcarHora" class="form-label small fw-semibold">Novo horário</label>
+                <select class="input-prime" id="remarcarHora" required>
+                  <!-- preenchido dinamicamente conforme a data escolhida -->
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-outline-prime" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn-prime text-center">Confirmar remarcação</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: dia de folga / bloquear horário -->
+  <div class="modal fade" id="modalDiaDeFolga" tabindex="-1" aria-labelledby="modalDiaDeFolgaTitulo" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content modal-prime">
+        <form id="formDiaDeFolga" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title fs-5 fonte-display" id="modalDiaDeFolgaTitulo">Dia de folga</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <p class="small texto-suave mb-3">Bloqueia a sua própria agenda. Clientes não conseguem marcar horário no período escolhido, e agendamentos que já existirem não são cancelados automaticamente.</p>
+            <div class="mb-3">
+              <label for="folgaData" class="form-label small fw-semibold">Data</label>
+              <input type="date" class="input-prime" id="folgaData" required>
+            </div>
+            <div class="mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="folgaTipo" id="folgaTipoDiaInteiro" value="dia" checked>
+                <label class="form-check-label small" for="folgaTipoDiaInteiro">Dia inteiro</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="folgaTipo" id="folgaTipoHorario" value="hora">
+                <label class="form-check-label small" for="folgaTipoHorario">Só um horário específico</label>
+              </div>
+            </div>
+            <div class="mb-3" id="folgaHoraWrap" style="display:none;">
+              <label for="folgaHora" class="form-label small fw-semibold">Horário</label>
+              <select class="input-prime" id="folgaHora">
+                <!-- preenchido dinamicamente conforme a data escolhida -->
+              </select>
+            </div>
+            <div class="mb-3">
+              <label for="folgaMotivo" class="form-label small fw-semibold">Motivo <span class="texto-suave fw-normal">(opcional)</span></label>
+              <input type="text" class="input-prime" id="folgaMotivo" placeholder="Ex.: Consulta médica, viagem...">
+            </div>
+            <div id="folgaListaExistente">
+              <!-- preenchido dinamicamente com as próximas folgas já marcadas -->
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-outline-prime" data-bs-dismiss="modal">Fechar</button>
+            <button type="submit" class="btn-prime text-center">Marcar folga</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="rodape-fixo">
+    <nav class="nav-inferior" aria-label="Navegação inferior">
+      <a href="painel-barbeiro.html" class="nav-item" data-nav="inicio"><i class="bi bi-house-door"></i><span>Início</span></a>
+      <a href="agendamentos.html" class="nav-item" data-nav="agenda"><i class="bi bi-calendar3"></i><span>Agenda</span></a>
+      <a href="perfil.html" class="nav-item" data-nav="perfil"><i class="bi bi-person"></i><span>Perfil</span></a>
+      <a href="preferencias-app.html" class="nav-item" data-nav="config"><i class="bi bi-gear"></i><span>Ajustes</span></a>
+    </nav>
+    <footer class="rodape-site">© 2026 Barbear Prime. Todos os direitos reservados.</footer>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../database/db.js" defer></script>
+<script src="../assets/src/ui.js" defer></script>
+</body>
+</html>

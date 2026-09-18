@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Barbear Prime | Preferências de Corte</title>
+<link rel="manifest" href="../manifest.json">
+<meta name="theme-color" content="#1A1613">
+<link rel="apple-touch-icon" href="../assets/img/icon-192.png">
+<link rel="icon" href="../assets/img/icon-192.png">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link rel="stylesheet" href="../assets/css/style.css">
+<script>!function(){var t=sessionStorage.getItem("bp-tema"),e=sessionStorage.getItem("bp-escala-fonte");t&&document.documentElement.setAttribute("data-tema",t);e&&document.documentElement.style.setProperty("--escala-fonte",e);}();</script>
+</head>
+<body data-pagina-atual="perfil">
+
+<div class="app-shell">
+  <div class="toast-prime" id="toastPrime"></div>
+
+  <div class="header-marca">
+    <a href="perfil.html" class="voltar-btn" aria-label="Voltar para o perfil"><i class="bi bi-arrow-left"></i></a>
+    <h1 class="titulo-marca">Preferências de Corte</h1>
+
+    <nav class="nav-desktop" aria-label="Navegação principal">
+      <a href="../index.html" class="nav-link-desktop"><i class="bi bi-house-door"></i> Início</a>
+      <a href="servicos.html" class="nav-link-desktop"><i class="bi bi-calendar3"></i> Serviços</a>
+      <a href="localizacao.html" class="nav-link-desktop"><i class="bi bi-geo-alt"></i> Localização</a>
+      <a href="perfil.html" class="nav-link-desktop ativo" aria-current="page"><i class="bi bi-person"></i> Perfil</a>
+    </nav>
+    <button class="btn-hamburguer-mobile" id="btnHamburguer" aria-label="Abrir menu" aria-expanded="false" aria-controls="menuHamburguerPainel">
+      <i class="bi bi-list"></i>
+    </button>
+  </div>
+
+  <div class="menu-hamburguer-painel" id="menuHamburguerPainel">
+    <div class="menu-hamburguer-conteudo">
+      <a href="../index.html"><i class="bi bi-house-door"></i> Início</a>
+      <a href="servicos.html"><i class="bi bi-calendar3"></i> Serviços</a>
+      <a href="localizacao.html"><i class="bi bi-geo-alt"></i> Localização</a>
+      <a href="preferencias-app.html"><i class="bi bi-gear"></i> Ajustes</a>
+    </div>
+  </div>
+
+  <div class="tela-conteudo">
+    <div class="scroll-y flex-grow-1 container-site pt-3" style="max-width:640px;">
+      <h2 class="fs-6 fw-bold mb-3">Preferências de Corte</h2>
+
+      <div class="mb-3">
+        <p class="small fw-semibold mb-2 d-flex align-items-center gap-1" id="labelTamanhoCabelo"><i class="bi bi-scissors"></i> Tamanho do Cabelo (No topo)</p>
+        <div class="d-flex gap-2 flex-wrap" data-grupo="tamanho_cabelo" role="group" aria-labelledby="labelTamanhoCabelo">
+          <button type="button" class="btn btn-sm rounded-pill opcao-pref" data-valor="curto">Curto</button>
+          <button type="button" class="btn btn-sm rounded-pill opcao-pref ativa" data-valor="medio">Médio</button>
+          <button type="button" class="btn btn-sm rounded-pill opcao-pref" data-valor="longo">Longo</button>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <p class="small fw-semibold mb-2 d-flex align-items-center gap-1" id="labelDegrade"><i class="bi bi-list-ul"></i> Tipo de Degradê (Sides)</p>
+        <div class="d-flex gap-2 flex-wrap" data-grupo="tipo_degrade" role="group" aria-labelledby="labelDegrade">
+          <button type="button" class="btn btn-sm rounded-pill opcao-pref ativa" data-valor="navalhado">Navalhado</button>
+          <button type="button" class="btn btn-sm rounded-pill opcao-pref" data-valor="sombreado">Sombreado</button>
+          <button type="button" class="btn btn-sm rounded-pill opcao-pref" data-valor="marcado">Marcado</button>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <p class="small fw-semibold mb-2 d-flex align-items-center gap-1" id="labelAcabamento"><i class="bi bi-check-circle"></i> Acabamento (Contorno)</p>
+        <div class="d-flex gap-2 flex-wrap" data-grupo="acabamento" role="group" aria-labelledby="labelAcabamento">
+          <button type="button" class="btn btn-sm rounded-pill opcao-pref" data-valor="natural">Natural</button>
+          <button type="button" class="btn btn-sm rounded-pill opcao-pref" data-valor="quadrado">Quadrado</button>
+          <button type="button" class="btn btn-sm rounded-pill opcao-pref ativa" data-valor="arredondado">Arredondado</button>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <p class="small fw-semibold mb-2 d-flex align-items-center gap-1" id="labelBarba"><i class="bi bi-person"></i> Estilo de Barba</p>
+        <div class="d-flex gap-2 flex-wrap" data-grupo="estilo_barba" role="group" aria-labelledby="labelBarba">
+          <button type="button" class="btn btn-sm rounded-pill opcao-pref" data-valor="feita_rasa">Feita (Rasa)</button>
+          <button type="button" class="btn btn-sm rounded-pill opcao-pref ativa" data-valor="longa_cheia">Longa/Cheia</button>
+          <button type="button" class="btn btn-sm rounded-pill opcao-pref" data-valor="sem_barba">Sem Barba</button>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label for="notasAdicionais" class="small fw-semibold mb-2 d-flex align-items-center gap-1"><i class="bi bi-pencil"></i> Notas Adicionais</label>
+        <textarea class="input-prime" id="notasAdicionais" rows="3" placeholder="Adicionar observações...">Prefiro a nuca bem alinhada e o contorno da barba mais fechado.</textarea>
+      </div>
+
+      <button type="button" class="btn-prime w-100 d-block text-center mb-3" id="preferenciasCorteSalvar">Salvar dados <i class="bi bi-check-lg ms-1"></i></button>
+    </div>
+  </div>
+
+  <div class="rodape-fixo">
+    <nav class="nav-inferior" aria-label="Navegação inferior">
+      <a href="../index.html" class="nav-item" data-nav="inicio"><i class="bi bi-house-door"></i><span>Início</span></a>
+      <a href="meus-agendamentos.html" class="nav-item" data-nav="agenda"><i class="bi bi-calendar3"></i><span>Agenda</span></a>
+      <a href="perfil.html" class="nav-item" data-nav="perfil"><i class="bi bi-person"></i><span>Perfil</span></a>
+      <a href="preferencias-app.html" class="nav-item" data-nav="config"><i class="bi bi-gear"></i><span>Ajustes</span></a>
+    </nav>
+    <footer class="rodape-site">© 2026 Barbear Prime. Todos os direitos reservados.</footer>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../database/db.js" defer></script>
+<script src="../assets/src/ui.js" defer></script>
+</body>
+</html>

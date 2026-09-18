@@ -1,0 +1,76 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[build.environment]
+  # As functions usam fetch/FormData/Blob nativos do Node (upload.js, ao
+  # enviar arquivos pro ImageKit) — precisa do Node 18 ou mais novo.
+  NODE_VERSION = "20"
+
+# Todas as chamadas de API do front-end usam o prefixo /api/... — este
+# redirect faz o Netlify rotear para a function certa por trás dos panos,
+# sem o front-end precisar saber o nome real do arquivo da function.
+[[redirects]]
+  from = "/api/auth/:action"
+  to = "/.netlify/functions/auth-:action"
+  status = 200
+
+[[redirects]]
+  from = "/api/servicos"
+  to = "/.netlify/functions/servicos"
+  status = 200
+
+[[redirects]]
+  from = "/api/servicos/:id"
+  to = "/.netlify/functions/servicos?id=:id"
+  status = 200
+
+[[redirects]]
+  from = "/api/barbeiros"
+  to = "/.netlify/functions/barbeiros"
+  status = 200
+
+[[redirects]]
+  from = "/api/usuarios/:id"
+  to = "/.netlify/functions/usuarios?id=:id"
+  status = 200
+
+[[redirects]]
+  from = "/api/agendamentos"
+  to = "/.netlify/functions/agendamentos"
+  status = 200
+
+[[redirects]]
+  from = "/api/agendamentos/:id"
+  to = "/.netlify/functions/agendamentos?id=:id"
+  status = 200
+
+[[redirects]]
+  from = "/api/horarios-disponiveis"
+  to = "/.netlify/functions/horarios-disponiveis"
+  status = 200
+
+[[redirects]]
+  from = "/api/preferencias-corte/:usuarioId"
+  to = "/.netlify/functions/preferencias-corte?usuarioId=:usuarioId"
+  status = 200
+
+[[redirects]]
+  from = "/api/config"
+  to = "/.netlify/functions/config"
+  status = 200
+
+[[redirects]]
+  from = "/api/notificacoes/:usuarioId"
+  to = "/.netlify/functions/notificacoes?usuarioId=:usuarioId"
+  status = 200
+
+[[redirects]]
+  from = "/api/upload"
+  to = "/.netlify/functions/upload"
+  status = 200
+
+[[redirects]]
+  from = "/api/bloqueios-agenda"
+  to = "/.netlify/functions/bloqueios-agenda"
+  status = 200

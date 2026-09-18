@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Barbear Prime | Agendamento</title>
+<link rel="manifest" href="../manifest.json">
+<meta name="theme-color" content="#1A1613">
+<link rel="apple-touch-icon" href="../assets/img/icon-192.png">
+<link rel="icon" href="../assets/img/icon-192.png">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link rel="stylesheet" href="../assets/css/style.css">
+<script>!function(){var t=sessionStorage.getItem("bp-tema"),e=sessionStorage.getItem("bp-escala-fonte");t&&document.documentElement.setAttribute("data-tema",t);e&&document.documentElement.style.setProperty("--escala-fonte",e);}();</script>
+</head>
+<body data-pagina-atual="agenda">
+
+<div class="app-shell">
+  <div class="toast-prime" id="toastPrime"></div>
+
+  <div class="header-marca">
+    <a href="servicos.html" class="voltar-btn" aria-label="Voltar para serviços"><i class="bi bi-arrow-left"></i></a>
+    <img class="selo-barbear" src="../assets/img/logo-header.png" alt="Emblema da Barbear Prime" style="object-fit:cover;">
+    <h1 class="titulo-marca">Agendamento</h1>
+
+    <nav class="nav-desktop" aria-label="Navegação principal">
+      <a href="../index.html" class="nav-link-desktop"><i class="bi bi-house-door"></i> Início</a>
+      <a href="servicos.html" class="nav-link-desktop ativo" aria-current="page"><i class="bi bi-calendar3"></i> Serviços</a>
+      <a href="localizacao.html" class="nav-link-desktop"><i class="bi bi-geo-alt"></i> Localização</a>
+      <a href="perfil.html" class="nav-link-desktop"><i class="bi bi-person"></i> Perfil</a>
+    </nav>
+    <button class="btn-hamburguer-mobile" id="btnHamburguer" aria-label="Abrir menu" aria-expanded="false" aria-controls="menuHamburguerPainel">
+      <i class="bi bi-list"></i>
+    </button>
+  </div>
+
+  <div class="menu-hamburguer-painel" id="menuHamburguerPainel">
+    <div class="menu-hamburguer-conteudo">
+      <a href="../index.html"><i class="bi bi-house-door"></i> Início</a>
+      <a href="servicos.html" class="ativo"><i class="bi bi-calendar3"></i> Serviços</a>
+      <a href="localizacao.html"><i class="bi bi-geo-alt"></i> Localização</a>
+      <a href="preferencias-app.html"><i class="bi bi-gear"></i> Ajustes</a>
+    </div>
+  </div>
+
+  <div class="tela-conteudo">
+    <div class="scroll-y flex-grow-1 container-site pt-3">
+      <div class="duas-colunas-desktop">
+        <div>
+          <h2 class="fs-6 fw-bold mb-2">Serviços selecionados</h2>
+          <div class="grid-servicos-desktop mb-4" id="chipsServicosSelecionados">
+            <!-- preenchido dinamicamente pelo ui.js a partir do sessionStorage -->
+          </div>
+
+          <div id="blocoEscolherBarbeiro" class="mb-4" style="display:none;">
+            <h2 class="fs-6 fw-bold mb-2">Escolha o barbeiro</h2>
+            <div class="grid-barbeiros" id="gridEscolherBarbeiro">
+              <!-- preenchido dinamicamente pelo ui.js a partir de window.db.getBarbeiros() -->
+            </div>
+          </div>
+
+          <h2 class="fs-6 fw-bold mb-2">Selecione a Data e Hora</h2>
+          <div class="card-prime card-calendario p-3 mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <button class="btn btn-sm btn-light" id="btnMesAnterior" aria-label="Mês anterior"><i class="bi bi-chevron-left"></i></button>
+              <strong class="fs-6" id="calendarioMesAno">...</strong>
+              <button class="btn btn-sm btn-light" id="btnMesProximo" aria-label="Próximo mês"><i class="bi bi-chevron-right"></i></button>
+            </div>
+            <div class="calendario-mini" id="calendarioGrid">
+              <table>
+                <caption class="visually-hidden">Calendário para escolha da data do agendamento</caption>
+                <thead><tr><th scope="col">D</th><th scope="col">S</th><th scope="col">T</th><th scope="col">Q</th><th scope="col">Q</th><th scope="col">S</th><th scope="col">S</th></tr></thead>
+                <tbody id="calendarioCorpo">
+                  <!-- preenchido dinamicamente pelo ui.js conforme o mês navegado -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="grade-horarios mb-4" id="gradeHorarios">
+            <!-- preenchido dinamicamente pelo ui.js a partir de window.db.getHorariosDisponiveis(data) -->
+            <p class="texto-suave small mb-0">Selecione um dia no calendário para ver os horários.</p>
+          </div>
+        </div>
+
+        <div>
+          <h2 class="fs-6 fw-bold mb-2">Resumo do pedido</h2>
+          <div class="card-prime p-3 mb-4">
+            <p class="small mb-1"><strong id="resumoData">...</strong> às <strong id="resumoHora">...</strong></p>
+            <p class="small mb-1" id="resumoBarbeiroWrap" style="display:none;">Com <strong id="resumoBarbeiro">...</strong></p>
+            <ul class="list-unstyled small mb-2" id="listaResumoServicos">
+              <!-- preenchido dinamicamente -->
+            </ul>
+            <hr class="my-2">
+            <div class="d-flex justify-content-between fw-bold">
+              <span>Total</span><span id="totalAgendamento">R$ 0,00</span>
+            </div>
+          </div>
+
+          <button type="button" class="btn-prime w-100 text-center" id="btnConfirmarAgendamento" data-bs-toggle="modal" data-bs-target="#modalConfirmarAgendamento">
+            <i class="bi bi-check-lg me-1"></i> Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de confirmação -->
+  <div class="modal fade" id="modalConfirmarAgendamento" tabindex="-1" aria-labelledby="modalConfirmarTitulo" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content modal-prime">
+        <div class="modal-header">
+          <h2 class="modal-title fs-5 fonte-display" id="modalConfirmarTitulo">Confirmar agendamento?</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-1"><strong id="modalResumoData">...</strong> às <strong id="modalResumoHora">...</strong></p>
+          <ul class="list-unstyled small mb-2" id="modalResumoServicos"></ul>
+          <p class="texto-suave small mb-0"><span id="modalQtdServicos">0</span> serviço(s), total de <span id="modalTotalAgendamento">R$ 0,00</span>.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-outline-prime" data-bs-dismiss="modal">Voltar e revisar</button>
+          <a href="meus-agendamentos.html" class="btn-prime text-center">Confirmar agendamento</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rodape-fixo">
+    <nav class="nav-inferior" aria-label="Navegação inferior">
+      <a href="../index.html" class="nav-item" data-nav="inicio"><i class="bi bi-house-door"></i><span>Início</span></a>
+      <a href="meus-agendamentos.html" class="nav-item" data-nav="agenda"><i class="bi bi-calendar3"></i><span>Agenda</span></a>
+      <a href="perfil.html" class="nav-item" data-nav="perfil"><i class="bi bi-person"></i><span>Perfil</span></a>
+      <a href="preferencias-app.html" class="nav-item" data-nav="config"><i class="bi bi-gear"></i><span>Ajustes</span></a>
+    </nav>
+    <footer class="rodape-site">© 2026 Barbear Prime. Todos os direitos reservados.</footer>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../database/db.js" defer></script>
+<script src="../assets/src/ui.js" defer></script>
+</body>
+</html>

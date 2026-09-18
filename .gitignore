@@ -1,0 +1,50 @@
+# ==============================================================================
+# BARBEAR PRIME — .gitignore
+# ==============================================================================
+# Duas categorias de coisa aqui: (1) o de sempre em qualquer projeto Node
+# (dependências, arquivos de máquina) e (2) documentação interna sensível
+# que não deveria ir pra um repositório público — ver MARKDOWN/
+# arquitetura-e-seguranca.md, seção "Por que o .gitignore está assim",
+# pra entender o raciocínio completo por trás de cada linha abaixo.
+# ==============================================================================
+
+# --- Segredos e configuração local (NUNCA commitar) --------------------------
+# O projeto usa variáveis de ambiente (DATABASE_URL, IMAGEKIT_PRIVATE_KEY,
+# RESEND_API_KEY etc.) configuradas no painel do Netlify — mas se um dia
+# você usar `netlify dev` com um arquivo .env local, ou `netlify env:pull`
+# pra baixar as variáveis pra um arquivo, isso NUNCA pode ir pro Git: um
+# .env commitado é a forma nº1 de vazar chave de API/banco de dados sem
+# querer (inclusive em repositórios que "sempre foram privados" — um
+# repo pode virar público por engano, ou um colaborador pode ter clonado
+# antes de você perceber o erro).
+.env
+.env.*
+!.env.example
+
+# --- Dependências e cache do Netlify CLI --------------------------------------
+node_modules/
+.netlify/
+
+# --- Arquivos de sistema operacional / editor ---------------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Documentação interna sensível --------------------------------------------
+# A pasta MARKDOWN/ documenta, em detalhe, TODAS as vulnerabilidades já
+# encontradas neste projeto — como cada uma funcionava, como foi explorada,
+# como foi corrigida. Isso é extremamente valioso para você (é o seu material
+# de estudo) e extremamente valioso para um atacante também, se o
+# repositório algum dia for público ou vazar: é basicamente um roteiro de
+# "onde essa equipe já errou antes" e "que padrões de bug ela tem". Nenhuma
+# das vulnerabilidades documentadas ali continua ativa no código atual — mas
+# a documentação em si não precisa estar no repositório de produção.
+# Guarde essa pasta localmente (ou num repositório PRIVADO separado, só seu).
+MARKDOWN/
+
+# Mesmo raciocínio para o changelog/guia de deploy que ficam na raiz do
+# projeto principal (cópias equivalentes já estão dentro de MARKDOWN/, que
+# já está ignorada acima — mas DEPLOY.md fica fora de MARKDOWN/, então
+# precisa da própria linha).
+DEPLOY.md

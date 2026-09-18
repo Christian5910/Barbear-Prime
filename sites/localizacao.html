@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Barbear Prime | Localização</title>
+<link rel="manifest" href="../manifest.json">
+<meta name="theme-color" content="#1A1613">
+<link rel="apple-touch-icon" href="../assets/img/icon-192.png">
+<link rel="icon" href="../assets/img/icon-192.png">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link rel="stylesheet" href="../assets/css/style.css">
+<script>!function(){var t=sessionStorage.getItem("bp-tema"),e=sessionStorage.getItem("bp-escala-fonte");t&&document.documentElement.setAttribute("data-tema",t);e&&document.documentElement.style.setProperty("--escala-fonte",e);}();</script>
+</head>
+<body data-pagina-atual="localizacao">
+
+<div class="app-shell">
+  <div class="toast-prime" id="toastPrime"></div>
+
+  <div class="header-marca">
+    <img class="selo-barbear" src="../assets/img/logo-header.png" alt="Emblema da Barbear Prime" style="object-fit:cover;">
+    <h1 class="titulo-marca">Localização</h1>
+
+    <nav class="nav-desktop" aria-label="Navegação principal">
+      <a href="../index.html" class="nav-link-desktop"><i class="bi bi-house-door"></i> Início</a>
+      <a href="servicos.html" class="nav-link-desktop"><i class="bi bi-calendar3"></i> Serviços</a>
+      <a href="localizacao.html" class="nav-link-desktop ativo" aria-current="page"><i class="bi bi-geo-alt"></i> Localização</a>
+      <a href="login.html" class="nav-link-desktop"><i class="bi bi-person"></i> Perfil</a>
+    </nav>
+    <button class="btn-hamburguer-mobile" id="btnHamburguer" aria-label="Abrir menu" aria-expanded="false" aria-controls="menuHamburguerPainel">
+      <i class="bi bi-list"></i>
+    </button>
+  </div>
+
+  <div class="menu-hamburguer-painel" id="menuHamburguerPainel">
+    <div class="menu-hamburguer-conteudo">
+      <a href="../index.html"><i class="bi bi-house-door"></i> Início</a>
+      <a href="servicos.html"><i class="bi bi-calendar3"></i> Serviços</a>
+      <a href="localizacao.html" class="ativo"><i class="bi bi-geo-alt"></i> Localização</a>
+      <a href="preferencias-app.html"><i class="bi bi-gear"></i> Ajustes</a>
+    </div>
+  </div>
+
+  <div class="tela-conteudo">
+    <div class="scroll-y flex-grow-1 container-site pt-3" style="max-width:900px;">
+    <div class="mb-3" style="height: 380px; width: 100%; border-radius: 12px; overflow: hidden;">
+      <iframe
+        id="mapaLocalizacaoIframe"
+        src="https://www.google.com/maps?q=Xique-Xique,BA&output=embed"
+        style="width: 100%; height: 100%; border: 0;"
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"
+        title="Mapa da localização da Barbear Prime"></iframe>
+    </div>
+      <p class="text-center fw-semibold mb-1" id="enderecoLinha1">Rua dos Berimbau Duros, Nº666</p>
+      <p class="text-center texto-suave small mb-0" id="enderecoLinha2">Bairro dos Perus, Xique-Xique, BA</p>
+
+      <!-- Preenchido dinamicamente a partir da lista de informações
+           configurada pela equipe (ver formEditarLocalizacao mais abaixo) -->
+      <div class="d-flex justify-content-center gap-4 mt-4 flex-wrap" id="localizacaoInfoBlocos"></div>
+
+      <!-- Só a equipe (barbeiro) pode editar o endereço/horário/telefone -->
+      <div class="text-center mt-4" id="localizacaoAcoesEquipe" style="display:none;">
+        <button type="button" class="btn-outline-prime" id="btnEditarLocalizacao">
+          <i class="bi bi-pencil-square me-1"></i> Editar endereço e informações
+        </button>
+      </div>
+
+      <form id="formEditarLocalizacao" class="card-prime p-3 mt-3 mx-auto text-start" style="max-width:520px; display:none;" novalidate>
+        <p class="small fw-semibold mb-2">Buscar endereço pelo CEP</p>
+        <div class="row g-2 mb-2">
+          <div class="col-7">
+            <label for="localCep" class="form-label small fw-semibold">CEP</label>
+            <input type="text" class="input-prime" id="localCep" placeholder="00000000" inputmode="numeric" maxlength="9">
+          </div>
+          <div class="col-5">
+            <label for="localNumero" class="form-label small fw-semibold">Número</label>
+            <input type="text" class="input-prime" id="localNumero" placeholder="666">
+          </div>
+        </div>
+        <button type="button" class="btn-outline-prime w-100 mb-3" id="btnBuscarCep">
+          <i class="bi bi-search me-1"></i> Buscar CEP e preencher endereço
+        </button>
+
+        <div class="mb-2">
+          <label for="localEndereco1" class="form-label small fw-semibold">Endereço (linha 1)</label>
+          <input type="text" class="input-prime" id="localEndereco1" required>
+        </div>
+        <div class="mb-2">
+          <label for="localEndereco2" class="form-label small fw-semibold">Bairro / cidade (linha 2)</label>
+          <input type="text" class="input-prime" id="localEndereco2" required>
+        </div>
+        <div class="mb-3">
+          <label for="localMapaBusca" class="form-label small fw-semibold">Endereço usado no mapa</label>
+          <input type="text" class="input-prime" id="localMapaBusca" placeholder="Ex.: Xique-Xique,BA" required>
+          <p class="small texto-suave mt-1 mb-0">Preenchido automaticamente ao buscar o CEP, mas pode ajustar manualmente.</p>
+        </div>
+
+        <hr class="my-3">
+        <p class="small fw-semibold mb-2">Informações (horário, telefone, redes sociais etc.)</p>
+        <div id="localizacaoBlocosEditor" class="d-flex flex-column gap-2 mb-2">
+          <!-- preenchido dinamicamente: um item por bloco, com ícone + texto + remover -->
+        </div>
+        <button type="button" class="btn-outline-prime w-100 mb-3" id="btnAdicionarBloco">
+          <i class="bi bi-plus-lg me-1"></i> Adicionar informação
+        </button>
+
+        <div class="d-flex gap-2 justify-content-end">
+          <button type="button" class="btn-outline-prime" id="btnCancelarEditarLocalizacao">Cancelar</button>
+          <button type="submit" class="btn-prime">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="rodape-fixo">
+    <nav class="nav-inferior" aria-label="Navegação inferior">
+      <a href="../index.html" class="nav-item" data-nav="inicio"><i class="bi bi-house-door"></i><span>Início</span></a>
+      <a href="meus-agendamentos.html" class="nav-item" data-nav="agenda"><i class="bi bi-calendar3"></i><span>Agenda</span></a>
+      <a href="login.html" class="nav-item" data-nav="perfil"><i class="bi bi-person"></i><span>Perfil</span></a>
+      <a href="preferencias-app.html" class="nav-item" data-nav="config"><i class="bi bi-gear"></i><span>Ajustes</span></a>
+    </nav>
+    <footer class="rodape-site">© 2026 Barbear Prime. Todos os direitos reservados.</footer>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../database/db.js" defer></script>
+<script src="../assets/src/ui.js" defer></script>
+</body>
+</html>

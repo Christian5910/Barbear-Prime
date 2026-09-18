@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Barbear Prime | Início</title>
+<meta name="description" content="Agende seu horário na Barbear Prime, cortes, barba e acabamento de tradição.">
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1A1613">
+<link rel="apple-touch-icon" href="assets/img/icon-192.png">
+<link rel="icon" href="assets/img/icon-192.png">
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link rel="stylesheet" href="assets/css/style.css">
+<script>!function(){var t=sessionStorage.getItem("bp-tema"),e=sessionStorage.getItem("bp-escala-fonte");t&&document.documentElement.setAttribute("data-tema",t);e&&document.documentElement.style.setProperty("--escala-fonte",e);}();</script>
+</head>
+<body data-pagina-atual="inicio">
+<a href="#conteudoPrincipal" class="pular-conteudo">Pular para o conteúdo</a>
+
+<div class="app-shell">
+  <div class="toast-prime" id="toastPrime"></div>
+
+  <div class="header-marca">
+    <img class="selo-barbear" src="assets/img/logo-header.png" alt="Emblema da Barbear Prime">
+    <h1 class="titulo-marca">Barbear Prime</h1>
+
+    <nav class="nav-desktop" aria-label="Navegação principal">
+      <a href="index.html" class="nav-link-desktop ativo" aria-current="page"><i class="bi bi-house-door"></i> Início</a>
+      <a href="sites/servicos.html" class="nav-link-desktop"><i class="bi bi-calendar3"></i> Serviços</a>
+      <a href="sites/localizacao.html" class="nav-link-desktop"><i class="bi bi-geo-alt"></i> Localização</a>
+      <a href="sites/login.html" class="nav-link-desktop"><i class="bi bi-person"></i> Perfil</a>
+    </nav>
+    <div class="header-marca-acoes">
+      <a href="sites/servicos.html" class="btn-prime">Agendar horário</a>
+    </div>
+
+    <button class="btn-hamburguer-mobile" id="btnHamburguer" aria-label="Abrir menu" aria-expanded="false" aria-controls="menuHamburguerPainel">
+      <i class="bi bi-list"></i>
+    </button>
+  </div>
+
+  <div class="menu-hamburguer-painel" id="menuHamburguerPainel">
+    <div class="menu-hamburguer-conteudo">
+      <a href="index.html" class="ativo"><i class="bi bi-house-door"></i> Início</a>
+      <a href="sites/servicos.html"><i class="bi bi-calendar3"></i> Serviços</a>
+      <a href="sites/localizacao.html"><i class="bi bi-geo-alt"></i> Localização</a>
+      <a href="sites/preferencias-app.html"><i class="bi bi-gear"></i> Ajustes</a>
+    </div>
+  </div>
+
+  <div class="tela-conteudo" id="conteudoPrincipal">
+    <div class="scroll-y flex-grow-1">
+      <div class="container-site">
+
+        <div class="hero-desktop">
+          <img class="capa-barbearia" src="assets/img/capa-barbearia.jpg" alt="Barbeiro da Barbear Prime em frente ao logotipo da barbearia" onerror="this.style.display='none'">
+          <div>
+            <p class="texto-dourado fw-bold text-uppercase small mb-2" style="letter-spacing:.08em;">Barbearia · Xique-Xique, BA</p>
+            <h2 class="fonte-display fw-semibold mb-3" style="font-size:clamp(1.5rem, 4vw, 2.4rem);line-height:1.15;">Tradição, precisão e estilo em cada corte.</h2>
+            <p class="texto-suave mb-4">Disciplina, foco e execução, cortes na tesoura e na máquina, barba na navalha e acabamento impecável para quem não abre mão do visual.</p>
+            <div class="d-flex gap-3 flex-wrap botoes-hero">
+              <a href="sites/servicos.html" class="btn-prime px-4 py-3"><i class="bi bi-calendar2-check me-1"></i> Agendar horário</a>
+              <a href="sites/localizacao.html" class="btn-outline-prime px-4 py-3"><i class="bi bi-geo-alt me-1"></i> Ver localização</a>
+            </div>
+            <p class="pt-3 mb-0">
+              <a href="#servicosDestaque" class="texto-suave text-decoration-none small d-inline-flex align-items-center gap-1">Ver serviços em destaque <i class="bi bi-arrow-down"></i></a>
+            </p>
+            <p class="pt-2 mb-0" id="homeLoginCta">
+              <a href="sites/login.html" class="fw-semibold texto-dourado text-decoration-none">Fazer login / Criar Conta</a>
+            </p>
+          </div>
+        </div>
+
+        <div class="faixa-valores">
+          <div class="item-valor"><i class="bi bi-award d-block mb-2"></i><strong>Desde 2016</strong><p class="texto-suave small mb-0">Barbearia de tradição na região</p></div>
+          <div class="item-valor"><i class="bi bi-scissors d-block mb-2"></i><strong>Equipe experiente</strong><p class="texto-suave small mb-0">Cortes clássicos e modernos</p></div>
+          <div class="item-valor"><i class="bi bi-star d-block mb-2"></i><strong>Acabamento na navalha</strong><p class="texto-suave small mb-0">Detalhe impecável em todo serviço</p></div>
+        </div>
+
+        <h2 class="fs-5 fw-bold mb-3 mt-2 fonte-display" id="servicosDestaque">Serviços em destaque</h2>
+        <div class="grid-servicos-desktop mb-4" id="gridServicosDestaqueHome">
+          <!-- preenchido dinamicamente pelo ui.js a partir de window.db.getServicosDestaque() -->
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="rodape-fixo">
+    <nav class="nav-inferior" aria-label="Navegação inferior">
+      <a href="index.html" class="nav-item" data-nav="inicio"><i class="bi bi-house-door"></i><span>Início</span></a>
+      <a href="sites/meus-agendamentos.html" class="nav-item" data-nav="agenda"><i class="bi bi-calendar3"></i><span>Agenda</span></a>
+      <a href="sites/login.html" class="nav-item" data-nav="perfil"><i class="bi bi-person"></i><span>Perfil</span></a>
+      <a href="sites/preferencias-app.html" class="nav-item" data-nav="config"><i class="bi bi-gear"></i><span>Ajustes</span></a>
+    </nav>
+    <footer class="rodape-site">© 2026 Barbear Prime. Todos os direitos reservados.</footer>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="assets/src/ui.js" defer></script>
+<script src="database/db.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "barbear-prime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Barbear Prime: front-end estático + Netlify Functions (API) + PostgreSQL (Neon) + ImageKit (imagens).",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "netlify dev"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.9.0",
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.0.0"
+  }
+}
