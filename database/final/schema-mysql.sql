@@ -45,10 +45,19 @@ CREATE TABLE usuarios (
   -- mesmo jeito que "esqueci minha senha" é um recurso disponível sem
   -- ser obrigatório.
   email_verificado TINYINT(1) NOT NULL DEFAULT 0,
+  -- Só tem efeito quando papel = 'equipe' — ver o mesmo comentário em
+  -- schema-postgresql.sql. A coluna gerada `master_unico` + o índice
+  -- único abaixo são o jeito do MySQL de garantir "no máximo uma linha
+  -- com master = 1" (MySQL não tem índice único parcial como o Postgres;
+  -- isso é o equivalente: fica NULL quando master = 0, e índice único
+  -- ignora NULLs, então só master = 1 duplicado seria barrado).
+  master         TINYINT(1) NOT NULL DEFAULT 0,
+  master_unico   TINYINT(1) GENERATED ALWAYS AS (IF(master = 1, 1, NULL)) VIRTUAL,
   criado_em      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   atualizado_em  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
   UNIQUE KEY uq_usuarios_email (email),
+  UNIQUE KEY uq_usuarios_master_unico (master_unico),
   KEY idx_usuarios_papel (papel)
 ) ENGINE=InnoDB;
 
@@ -252,6 +261,9 @@ CREATE TABLE preferencias_notificacao (
   usuario_id             BIGINT UNSIGNED PRIMARY KEY,
   notif_agendamentos     TINYINT(1) NOT NULL DEFAULT 1,
   notif_ofertas          TINYINT(1) NOT NULL DEFAULT 0,
+  -- Só tem efeito para contas de equipe — ver comentário equivalente em
+  -- schema-postgresql.sql.
+  notif_email_agendamentos TINYINT(1) NOT NULL DEFAULT 0,
   som_notificacao        ENUM('padrao', 'sino', 'navalha', 'personalizado', 'silencioso') NOT NULL DEFAULT 'padrao',
   som_personalizado_url  TEXT NULL, -- link para o arquivo de áudio (ver README.md sobre upload de mídia)
   som_personalizado_nome VARCHAR(190) NULL,

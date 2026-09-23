@@ -36,7 +36,7 @@ exports.handler = async (event) => {
   }
 
   const usuarios = await sql`
-    SELECT id, nome, email, senha_hash, papel, avatar_url, email_verificado
+    SELECT id, nome, email, senha_hash, papel, avatar_url, email_verificado, master
     FROM usuarios
     WHERE email = ${email} AND ativo = TRUE
     LIMIT 1

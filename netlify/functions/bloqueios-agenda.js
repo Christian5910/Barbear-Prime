@@ -8,14 +8,14 @@
  * hora preenchida (HH:MM) = bloqueia só aquele horário específico.
  */
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJson, paraDataISO } = require('./_lib/http');
 const { getUsuarioDaSessao } = require('./_lib/sessao');
 
 function paraApi(linha) {
   return {
     id: String(linha.id),
     barbeiroId: String(linha.barbeiro_id),
-    data: linha.data,
+    data: paraDataISO(linha.data),
     hora: linha.hora ? linha.hora.slice(0, 5) : null,
     motivo: linha.motivo || '',
   };

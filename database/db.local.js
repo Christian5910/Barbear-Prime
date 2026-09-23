@@ -22,8 +22,8 @@
   const SERVICOS_PADRAO = [
     { id: '1', nome: 'Barba', preco: 20, duracaoMin: 30, descricao: 'Modelagem e alinhamento da barba com navalha/máquina, hidratação e finalização do contorno.' },
     { id: '2', nome: 'Corte e Barba', preco: 45, duracaoMin: 60, descricao: 'Combo completo: corte de cabelo + barba, com acabamento e finalização.' },
-    { id: '3', nome: 'Corte Padrao', preco: 30, duracaoMin: 40, descricao: 'Corte de cabelo clássico, com máquina e tesoura, lavagem e finalização.' },
-    { id: '4', nome: 'Degrade', preco: 35, duracaoMin: 45, descricao: 'Corte degradê (fade), com transição suave entre os comprimentos.' },
+    { id: '3', nome: 'Corte Padrão', preco: 30, duracaoMin: 40, descricao: 'Corte de cabelo clássico, com máquina e tesoura, lavagem e finalização.' },
+    { id: '4', nome: 'Degradê', preco: 35, duracaoMin: 45, descricao: 'Corte degradê (fade), com transição suave entre os comprimentos.' },
     { id: '5', nome: 'Pigmento', preco: 30, duracaoMin: 35, descricao: 'Aplicação de pigmento para disfarçar falhas ou uniformizar a cor.' },
     { id: '6', nome: 'Sobrancelha', preco: 20, duracaoMin: 20, descricao: 'Design e alinhamento de sobrancelha.' },
     { id: '7', nome: 'Reflexo', preco: 55, duracaoMin: 70, descricao: 'Aplicação de reflexo/mechas no cabelo.' },

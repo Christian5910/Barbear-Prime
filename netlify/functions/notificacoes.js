@@ -4,18 +4,19 @@
  *   PUT — salva/atualiza (upsert)
  */
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJson, idDaRequisicao } = require('./_lib/http');
 const { getUsuarioDaSessao } = require('./_lib/sessao');
 
 const SONS_VALIDOS = ['padrao', 'sino', 'navalha', 'personalizado', 'silencioso'];
 
 function paraApi(linha) {
   if (!linha) {
-    return { notifAgendamentos: true, notifOfertas: false, somNotificacao: 'padrao', somPersonalizado: null };
+    return { notifAgendamentos: true, notifOfertas: false, notifEmailAgendamentos: false, somNotificacao: 'padrao', somPersonalizado: null };
   }
   return {
     notifAgendamentos: linha.notif_agendamentos,
     notifOfertas: linha.notif_ofertas,
+    notifEmailAgendamentos: linha.notif_email_agendamentos,
     somNotificacao: linha.som_notificacao,
     somPersonalizado: linha.som_personalizado_url
       ? { url: linha.som_personalizado_url, nomeArquivo: linha.som_personalizado_nome }
@@ -24,7 +25,7 @@ function paraApi(linha) {
 }
 
 exports.handler = async (event) => {
-  const usuarioId = event.queryStringParameters?.usuarioId;
+  const usuarioId = idDaRequisicao(event, 'usuarioId');
   if (!usuarioId) return erro(400, 'Informe o usuarioId.');
 
   const usuarioLogado = await getUsuarioDaSessao(event);
@@ -67,13 +68,19 @@ exports.handler = async (event) => {
       ? String(dados.somPersonalizado.nomeArquivo).slice(0, 190)
       : null;
 
+    // Só faz sentido pra conta de equipe (é o barbeiro sendo avisado da
+    // própria agenda) — ignora silenciosamente se marcado por uma conta
+    // de cliente, em vez de gravar um estado que nunca vai ser usado.
+    const notifEmailAgendamentos = Boolean(dados.notifEmailAgendamentos) && usuarioLogado.papel === 'equipe';
+
     const [salvo] = await sql`
       INSERT INTO preferencias_notificacao
-        (usuario_id, notif_agendamentos, notif_ofertas, som_notificacao, som_personalizado_url, som_personalizado_nome)
+        (usuario_id, notif_agendamentos, notif_ofertas, notif_email_agendamentos, som_notificacao, som_personalizado_url, som_personalizado_nome)
       VALUES (
         ${usuarioId},
         ${dados.notifAgendamentos !== false},
         ${Boolean(dados.notifOfertas)},
+        ${notifEmailAgendamentos},
         ${somNotificacao},
         ${somPersonalizadoUrl},
         ${somPersonalizadoNome}
@@ -81,6 +88,7 @@ exports.handler = async (event) => {
       ON CONFLICT (usuario_id) DO UPDATE SET
         notif_agendamentos = EXCLUDED.notif_agendamentos,
         notif_ofertas = EXCLUDED.notif_ofertas,
+        notif_email_agendamentos = EXCLUDED.notif_email_agendamentos,
         som_notificacao = EXCLUDED.som_notificacao,
         som_personalizado_url = EXCLUDED.som_personalizado_url,
         som_personalizado_nome = EXCLUDED.som_personalizado_nome

@@ -48,20 +48,20 @@
 
       <!-- Avatar com o botão da engrenagem acoplado -->
       <div class="avatar-wrapper mb-3">
-        <img class="avatar-circular" id="perfilAvatar" src="../assets/img/avatar-exemplo.jpg" alt="Foto de perfil" onerror="this.src='../assets/img/avatar-exemplo.jpg'">
+        <img class="avatar-circular img-carregando" id="perfilAvatar" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Foto de perfil" onerror="this.onerror=null;this.src='../assets/img/avatar-exemplo.jpg'">
         <a href="editar-perfil.html" class="btn-config-perfil" title="Editar dados" aria-label="Editar dados do perfil">
           <i class="bi bi-gear-fill"></i>
         </a>
       </div>
 
       <!-- Nome do usuário -->
-      <h2 class="fs-5 fw-bold mb-3" id="perfilNome">Cliente</h2>
+      <h2 class="fs-5 fw-bold mb-3 skeleton skeleton-linha mx-auto" id="perfilNome">&nbsp;</h2>
 
       <div class="text-start mx-auto" style="max-width:320px;">
         <label class="small texto-suave">Nome</label>
-        <p class="fw-semibold mb-2" id="perfilNomeCampo">Cliente</p>
+        <p class="fw-semibold mb-2 skeleton skeleton-linha" id="perfilNomeCampo">&nbsp;</p>
         <label class="small texto-suave">E-mail</label>
-        <p class="fw-semibold mb-2" id="perfilEmail">email@exemplo.com</p>
+        <p class="fw-semibold mb-2 skeleton skeleton-linha" id="perfilEmail">&nbsp;</p>
       </div>
 
       <div class="card-prime p-3 text-start mx-auto mt-3" id="perfilProximoAgendamentoCard" style="max-width:320px;">
@@ -84,7 +84,7 @@
         <a href="painel-barbeiro.html" class="btn-outline-prime d-flex justify-content-between align-items-center">
           Ir para o Painel <i class="bi bi-chevron-right"></i>
         </a>
-        <a href="localizacao.html" class="btn-outline-prime d-flex justify-content-between align-items-center">
+        <a href="localizacao.html" class="btn-outline-prime d-flex justify-content-between align-items-center" id="linkAlterarLocalizacao" style="display:none;">
           Alterar Localização <i class="bi bi-chevron-right"></i>
         </a>
         <button type="button" class="btn-outline-prime d-flex justify-content-between align-items-center" id="btnCriarContaBarbeiro" style="display:none;" data-bs-toggle="modal" data-bs-target="#modalCriarBarbeiro">

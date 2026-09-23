@@ -75,6 +75,20 @@
         </div>
         <p class="texto-suave small mb-2" id="explicacaoNotifAgendamentos">Avisa no dia do seu corte e 1 hora antes do horário marcado.</p>
 
+        <!-- Só aparece pra conta de equipe (ver ui.js) — o backend também
+             ignora esse campo se vier de uma conta de cliente (ver
+             notificacoes.js), então esconder aqui é só conveniência de UX,
+             não a única proteção. -->
+        <div id="blocoNotifEmailEquipe" style="display:none;">
+          <div class="d-flex justify-content-between align-items-center py-1 form-switch-prime">
+            <label for="notifEmailAgendamentos" class="small m-0">E-mail de novo agendamento</label>
+            <div class="form-check form-switch m-0">
+              <input class="form-check-input" type="checkbox" id="notifEmailAgendamentos">
+            </div>
+          </div>
+          <p class="texto-suave small mb-2">Manda um e-mail pra você sempre que um cliente marcar um horário na sua agenda, além do aviso dentro do app.</p>
+        </div>
+
         <div class="d-flex justify-content-between align-items-center py-1 form-switch-prime">
           <label for="notifOfertas" class="small m-0">Novidades e Ofertas</label>
           <div class="form-check form-switch m-0">

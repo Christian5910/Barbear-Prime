@@ -22,20 +22,21 @@ USE barbear_prime;
 -- ----------------------------------------------------------------------------
 -- Usuários (mesmos 3 do seed atual: 2 clientes + 1 barbeiro/equipe)
 -- ----------------------------------------------------------------------------
-INSERT INTO usuarios (id, nome, email, senha_hash, papel, avatar_url, ativo, email_verificado) VALUES
+INSERT INTO usuarios (id, nome, email, senha_hash, papel, avatar_url, ativo, email_verificado, master) VALUES
   (1001, 'Joao Osvaldo', 'joao@yahoo.com',
    '$2y$10$examplehashreplaceonrealsetup0000000000000000000000000000', -- 123456
-   'cliente', '/assets/img/avatar-exemplo.jpg', 1, 1),
+   'cliente', '/assets/img/avatar-exemplo.jpg', 1, 1, 0),
   (1002, 'Barbeiro Admin', 'equipe@barbearprime.com',
    '$2y$10$examplehashreplaceonrealsetup0000000000000000000000000000', -- admin123
-   'equipe', '/assets/img/avatar-exemplo.jpg', 1, 1),
+   'equipe', '/assets/img/avatar-exemplo.jpg', 1, 1, 1),
   (1003, 'Ana Silva', 'ana@email.com',
    '$2y$10$examplehashreplaceonrealsetup0000000000000000000000000000', -- senha123
-   'cliente', '/assets/img/avatar-exemplo.jpg', 1, 1)
+   'cliente', '/assets/img/avatar-exemplo.jpg', 1, 1, 0)
 ON DUPLICATE KEY UPDATE
   nome = VALUES(nome),
   papel = VALUES(papel),
-  avatar_url = VALUES(avatar_url);
+  avatar_url = VALUES(avatar_url),
+  master = VALUES(master);
 
 -- ----------------------------------------------------------------------------
 -- Serviços (catálogo padrão — SERVICOS_PADRAO em db.js), em ordem alfabética
@@ -43,8 +44,8 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO servicos (id, nome, descricao, preco_centavos, duracao_min, destaque) VALUES
   (1, 'Barba', 'Modelagem e alinhamento da barba com navalha/máquina, hidratação e finalização do contorno.', 2000, 30, 1),
   (2, 'Corte e Barba', 'Combo completo: corte de cabelo + barba, com acabamento e finalização.', 4500, 60, 1),
-  (3, 'Corte Padrao', 'Corte de cabelo clássico, com máquina e tesoura, lavagem e finalização.', 3000, 40, 1),
-  (4, 'Degrade', 'Corte degradê (fade), com transição suave entre os comprimentos.', 3500, 45, 1),
+  (3, 'Corte Padrão', 'Corte de cabelo clássico, com máquina e tesoura, lavagem e finalização.', 3000, 40, 1),
+  (4, 'Degradê', 'Corte degradê (fade), com transição suave entre os comprimentos.', 3500, 45, 1),
   (5, 'Pigmento', 'Aplicação de pigmento para disfarçar falhas ou uniformizar a cor.', 3000, 35, 0),
   (6, 'Sobrancelha', 'Design e alinhamento de sobrancelha.', 2000, 20, 0),
   (7, 'Reflexo', 'Aplicação de reflexo/mechas no cabelo.', 5500, 70, 0),
@@ -81,7 +82,7 @@ ON DUPLICATE KEY UPDATE hora = VALUES(hora);
 -- da marcação (igual a servicosSnapshot no localStorage).
 INSERT INTO agendamento_servicos (agendamento_id, servico_id, nome_snapshot, preco_centavos_snapshot) VALUES
   (2001, 1, 'Barba', 2000),
-  (2001, 3, 'Corte Padrao', 3000),
+  (2001, 3, 'Corte Padrão', 3000),
   (2002, 2, 'Corte e Barba', 4500),
   (2003, 4, 'Degrade', 3500),
   (2003, 5, 'Pigmento', 3000)

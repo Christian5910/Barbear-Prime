@@ -107,14 +107,14 @@ CREATE TABLE tentativas_login (
 ) ENGINE=InnoDB;
 
 INSERT INTO servicos (id, nome, descricao, preco_centavos, duracao_min, destaque) VALUES
-  (1, 'Barba', 'Modelagem e alinhamento da barba com navalha, maquina e finalizacao do contorno.', 2000, 30, 1),
+  (1, 'Barba', 'Modelagem e alinhamento da barba com navalha, máquina e finalização do contorno.', 2000, 30, 1),
   (2, 'Corte e Barba', 'Combo completo de corte de cabelo e barba com acabamento na navalha.', 4500, 60, 1),
-  (3, 'Corte Padrao', 'Corte de cabelo tradicional com tesoura e maquina.', 3000, 40, 1),
-  (4, 'Degrade', 'Corte degrade com transicao bem acabada.', 3500, 45, 1),
-  (5, 'Pigmento', 'Aplicacao de pigmento capilar para disfarcar falhas ou embranquecimento.', 3000, 35, 0),
+  (3, 'Corte Padrão', 'Corte de cabelo tradicional com tesoura e máquina.', 3000, 40, 1),
+  (4, 'Degradê', 'Corte degradê com transição bem acabada.', 3500, 45, 1),
+  (5, 'Pigmento', 'Aplicação de pigmento capilar para disfarçar falhas ou embranquecimento.', 3000, 35, 0),
   (6, 'Sobrancelha', 'Design e alinhamento de sobrancelha na navalha.', 2000, 20, 0),
-  (7, 'Reflexo', 'Aplicacao de reflexo e mechas.', 5500, 70, 0),
-  (8, 'Nevou', 'Descoloracao completa estilo nevou.', 14500, 120, 0)
+  (7, 'Reflexo', 'Aplicação de reflexo e mechas.', 5500, 70, 0),
+  (8, 'Nevou', 'Descoloração completa estilo nevou.', 14500, 120, 0)
 ON DUPLICATE KEY UPDATE
   nome = VALUES(nome),
   descricao = VALUES(descricao),

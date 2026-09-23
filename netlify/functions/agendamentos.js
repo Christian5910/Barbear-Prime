@@ -3,7 +3,9 @@
  *   GET  ?usuarioId=&barbeiroId=&status=   — lista agendamentos (requer sessão)
  *   POST                                    — cria um agendamento novo
  *
- * /api/agendamentos/:id  (roteado via querystring ?id=... pelo netlify.toml)
+ * /api/agendamentos/:id  (o :id chega via caminho — netlify.toml usa um
+ * splat — ou via query string ?id=..., os dois aceitos por idDaRequisicao()
+ * em _lib/http.js)
  *   PUT  { acao: 'remarcar', data, hora } | { acao: 'status', status }
  *
  * Regras de negócio replicadas de database/db.js (ver netlify/functions/_lib/horarios.js):
@@ -15,9 +17,22 @@
  *     já marcados.
  */
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJson, idDaRequisicao, paraDataISO } = require('./_lib/http');
 const { getUsuarioDaSessao } = require('./_lib/sessao');
 const { slotsNecessarios, sequenciaValidaNoDia, horariosBloqueadosNoDia } = require('./_lib/horarios');
+const { enviarEmailNovoAgendamento } = require('./_lib/email');
+
+const DIAS_SEMANA_PT = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+const MESES_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+// "2026-09-25" → "sexta-feira, 25 de setembro" — mesmo formato usado no
+// front-end (formatarData() em ui.js), só que gerado aqui pro e-mail de
+// novo agendamento, que é montado inteiramente no servidor.
+function formatarDataPtBr(dataISO) {
+  const [ano, mes, dia] = dataISO.slice(0, 10).split('-').map(Number);
+  const data = new Date(ano, mes - 1, dia);
+  return `${DIAS_SEMANA_PT[data.getDay()]}, ${dia} de ${MESES_PT[mes - 1]}`;
+}
 
 async function montarSnapshot(sql, servicoIds) {
   if (!servicoIds.length) return [];
@@ -56,7 +71,7 @@ function montarAgendamentoApi(agendamento, servicos, horarios) {
     usuarioNome: agendamento.cliente_nome,
     usuarioAvatar: agendamento.usuario_avatar_url || null,
     barbeiroId: agendamento.barbeiro_id ? String(agendamento.barbeiro_id) : null,
-    data: agendamento.data_servico,
+    data: paraDataISO(agendamento.data_servico),
     hora: agendamento.hora_inicio.slice(0, 5),
     status: agendamento.status,
     servicoIds: servicos.map(s => String(s.servico_id)),
@@ -72,7 +87,7 @@ function montarAgendamentoApi(agendamento, servicos, horarios) {
 
 exports.handler = async (event) => {
   const sql = getSql();
-  const id = event.queryStringParameters?.id;
+  const id = idDaRequisicao(event);
 
   const usuarioLogado = await getUsuarioDaSessao(event);
   if (!usuarioLogado) return erro(401, 'Entre na sua conta para continuar.');
@@ -139,6 +154,21 @@ exports.handler = async (event) => {
     // mensagem clara.
     if (clienteNome.length > 120) {
       return erro(400, 'Nome do cliente muito longo (máximo 120 caracteres).');
+    }
+
+    // Limite de 5 agendamentos a cada 5 horas — só para o próprio cliente
+    // se auto-agendando (não conta quando é a equipe criando pra um
+    // cliente sem conta: isso é atendimento de balcão de verdade, não
+    // abuso do sistema). Evita alguém encher a agenda de pedidos
+    // (por engano ou de propósito) num intervalo curto.
+    if (usuarioLogado.papel !== 'equipe') {
+      const [{ total: pedidosRecentes }] = await sql`
+        SELECT COUNT(*)::int AS total FROM agendamentos
+        WHERE usuario_id = ${usuarioLogado.id} AND criado_em > now() - interval '5 hours'
+      `;
+      if (pedidosRecentes >= 5) {
+        return erro(429, 'Muitos agendamentos em pouco tempo. Tente novamente daqui a algumas horas.');
+      }
     }
 
     // IMPORTANTE (papéis/privilégios + lógica de negócio): quando quem está
@@ -217,6 +247,35 @@ exports.handler = async (event) => {
     }
 
     const servicosSalvos = await sql`SELECT * FROM agendamento_servicos WHERE agendamento_id = ${novoAgendamento.id}`;
+
+    // Best-effort: nunca deixa uma falha aqui atrapalhar a resposta pro
+    // cliente (o agendamento já está criado e válido nesse ponto). Só
+    // dispara quando é o CLIENTE criando (não quando a própria equipe
+    // cria um atendimento de balcão — o barbeiro não precisa de e-mail
+    // avisando de algo que ele mesmo acabou de fazer) e só se o barbeiro
+    // tiver ativado essa opção em Preferências.
+    if (usuarioLogado.papel !== 'equipe') {
+      try {
+        const [barbeiro] = await sql`
+          SELECT u.nome, u.email, COALESCE(p.notif_email_agendamentos, FALSE) AS notif_email
+          FROM usuarios u
+          LEFT JOIN preferencias_notificacao p ON p.usuario_id = u.id
+          WHERE u.id = ${barbeiroIdFinal} AND u.ativo = TRUE
+          LIMIT 1
+        `;
+        if (barbeiro?.notif_email) {
+          await enviarEmailNovoAgendamento(event, barbeiro.email, barbeiro.nome, {
+            clienteNome,
+            dataFormatada: formatarDataPtBr(data),
+            hora,
+            servicos: servicosSalvos.map(s => s.nome_snapshot).join(', '),
+          });
+        }
+      } catch (e) {
+        console.error('Falha ao enviar e-mail de novo agendamento (agendamento já criado normalmente):', e.message);
+      }
+    }
+
     return json(201, { agendamento: montarAgendamentoApi(novoAgendamento, servicosSalvos, sequencia) });
   }
 

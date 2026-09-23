@@ -24,7 +24,7 @@
  * dos usuários a buscar a lista atualizada na próxima visita.
  */
 
-const CACHE_VERSAO = 'barbear-prime-v1';
+const CACHE_VERSAO = 'barbear-prime-v3';
 
 const ARQUIVOS_PRINCIPAIS = [
   './index.html',
@@ -45,6 +45,7 @@ const PAGINAS_SITES = [
   'agendamentos.html',
   'cadastro.html',
   'editar-perfil.html',
+  'esqueci-senha.html',
   'localizacao.html',
   'login-equipe.html',
   'login.html',
@@ -54,7 +55,9 @@ const PAGINAS_SITES = [
   'perfil.html',
   'preferencias-app.html',
   'preferencias-corte.html',
+  'redefinir-senha.html',
   'servicos.html',
+  'verificar-email.html',
 ].map(nome => `./sites/${nome}`);
 
 // CDNs externos (Bootstrap/Bootstrap Icons) — cacheados também, senão o
@@ -137,3 +140,54 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+/**
+ * Clique numa notificação (do "Novo agendamento!" da equipe, disparada
+ * por assets/src/ui.js via registration.showNotification() — ver
+ * bpDispararNotificacaoAcoes()). Dois comportamentos:
+ *  - clicou no botão de ação "Confirmar" (event.action === 'confirmar'):
+ *    confirma o agendamento direto por aqui, sem precisar abrir o app.
+ *  - clicou em qualquer outro lugar da notificação: só abre/foca a página
+ *    de pendências (sites/agendamentos.html), sem confirmar nada sozinho.
+ *
+ * IMPORTANTE: um clique em botão de ação SEM `event.waitUntil()` corre o
+ * risco do navegador encerrar o service worker antes do fetch terminar —
+ * por isso a chamada de confirmação também fica dentro do waitUntil.
+ */
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const dados = event.notification.data || {};
+  const urlAlvo = dados.url || './sites/agendamentos.html';
+
+  async function confirmarEAbrir() {
+    if (event.action === 'confirmar' && dados.agendamentoId) {
+      try {
+        await fetch(`/api/agendamentos?id=${encodeURIComponent(dados.agendamentoId)}`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ acao: 'status', status: 'confirmado' }),
+        });
+      } catch (e) {
+        // Sem internet ou erro do servidor — abre a página normalmente;
+        // a pessoa confirma por lá manualmente.
+      }
+    }
+    await abrirOuFocarPagina(urlAlvo);
+  }
+
+  event.waitUntil(confirmarEAbrir());
+});
+
+async function abrirOuFocarPagina(caminhoRelativo) {
+  const urlAbsoluta = new URL(caminhoRelativo, self.location.origin).href;
+  const clientesAbertos = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  for (const cliente of clientesAbertos) {
+    if (cliente.url === urlAbsoluta && 'focus' in cliente) {
+      return cliente.focus();
+    }
+  }
+  if (self.clients.openWindow) {
+    return self.clients.openWindow(urlAbsoluta);
+  }
+}

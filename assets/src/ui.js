@@ -9,6 +9,21 @@
    ============================================================================ */
 
 /* ==========================================================================
+   REDE DE SEGURANÇA — revela a navegação mesmo se algo travar
+   ==========================================================================
+   padronizarMenus() (mais abaixo) marca <html class="nav-pronta"> quando
+   termina de montar o menu certo pra sessão — até lá, o CSS mantém o menu
+   invisível de propósito (ver "Anti-flicker da navegação" em style.css),
+   pra nunca mostrar o menu errado nem por um instante. Mas se ALGO travar
+   antes disso (uma falha de rede ao confirmar a sessão, um erro
+   inesperado em outra parte da inicialização), o menu não pode ficar
+   invisível pra sempre — pior que o pisca original seria não ter
+   navegação nenhuma. Roda fora do DOMContentLoaded, então dispara mesmo
+   que o resto da inicialização nunca chegue a terminar.
+   ========================================================================== */
+setTimeout(() => document.documentElement.classList.add('nav-pronta'), 2500);
+
+/* ==========================================================================
    SERVICE WORKER — Cache de arquivos (HTML/CSS/JS/imagens) para uso offline
    ==========================================================================
    Registrado o quanto antes, fora do DOMContentLoaded, pra começar a
@@ -60,6 +75,44 @@ function bpDispararNotificacao(titulo, corpo) {
   } catch (e) {
     // Ambiente sem suporte real a notificações (ex.: alguns webviews) — ignora silenciosamente.
   }
+}
+
+/**
+ * Como bpDispararNotificacao(), mas com botão de ação e destino de clique
+ * — usa registration.showNotification() (Service Worker) em vez do
+ * construtor simples `new Notification()`, porque só a versão via Service
+ * Worker suporta `actions` (botões dentro da notificação) e continua
+ * conseguindo reagir ao clique mesmo com a aba fechada. Cai pro jeito
+ * simples (sem botão, só abre a página ao clicar) se o Service Worker não
+ * estiver disponível.
+ *
+ * @param {{agendamentoId?: string, url?: string, acoes?: Array}} opcoes
+ *   `url`: página aberta/focada ao clicar (relativa à raiz do site).
+ *   `agendamentoId` + uma ação com `action: 'confirmar'`: processado em
+ *   sw.js (evento notificationclick) pra confirmar o agendamento direto
+ *   dali, sem precisar abrir o app.
+ */
+async function bpDispararNotificacaoAcoes(titulo, corpo, opcoes = {}) {
+  if (!bpNotificacoesSuportadas() || Notification.permission !== 'granted') return;
+  const { agendamentoId, url, acoes } = opcoes;
+  try {
+    if ('serviceWorker' in navigator) {
+      const registro = await navigator.serviceWorker.ready;
+      await registro.showNotification(titulo, {
+        body: corpo,
+        icon: resolverAsset('assets/img/icon-192.png'),
+        tag: `bp-${titulo}-${corpo}`,
+        data: { agendamentoId, url },
+        actions: acoes || [],
+      });
+      bpTocarSomNotificacao();
+      return;
+    }
+  } catch (e) {
+    // Cai pro fallback simples abaixo (sem Service Worker disponível, ou
+    // showNotification falhou por outro motivo).
+  }
+  bpDispararNotificacao(titulo, corpo);
 }
 
 function bpLimparLembretesAgendados() {
@@ -207,11 +260,21 @@ async function bpIniciarMonitorAgendaBarbeiro(sessao) {
       for (const [id, status] of atual) {
         const statusAnterior = anterior.get(id);
         if (status === 'pendente' && statusAnterior !== 'pendente') {
-          bpDispararNotificacao(
+          bpDispararNotificacaoAcoes(
             'Novo agendamento! 📅',
             statusAnterior === undefined
               ? 'Um cliente marcou um horário e está aguardando confirmação.'
-              : 'Um agendamento foi remarcado e está aguardando confirmação novamente.'
+              : 'Um agendamento foi remarcado e está aguardando confirmação novamente.',
+            {
+              agendamentoId: id,
+              // Caminho absoluto a partir da raiz (não rota(), que monta
+              // caminho relativo à página atual) — o Service Worker
+              // resolve isso a partir de self.location.origin, não de
+              // onde esta notificação foi disparada, então precisa ser
+              // inequívoco independente da página aberta no momento.
+              url: '/sites/agendamentos.html',
+              acoes: [{ action: 'confirmar', title: 'Confirmar' }],
+            }
           );
         } else if (statusAnterior && statusAnterior !== 'cancelado' && status === 'cancelado') {
           bpDispararNotificacao('Agendamento desmarcado', 'Um horário da sua agenda foi cancelado.');
@@ -309,6 +372,31 @@ function iniciarToggleOfertas() {
       const modalEl = document.getElementById('modalNotifOfertasInfo');
       if (modalEl && window.bootstrap) new window.bootstrap.Modal(modalEl).show();
     }
+  });
+}
+
+/**
+ * Toggle "E-mail de novo agendamento" — só existe (e só aparece) pra
+ * conta de equipe (ver netlify/functions/agendamentos.js e
+ * notificacoes.js: o backend ignora esse campo vindo de uma conta de
+ * cliente de qualquer forma, esconder aqui é reforço de UX).
+ */
+async function iniciarToggleEmailAgendamentos() {
+  const bloco = document.getElementById('blocoNotifEmailEquipe');
+  const toggle = document.getElementById('notifEmailAgendamentos');
+  if (!bloco || !toggle || !window.db) return;
+
+  const sessao = await getSessaoAtual();
+  if (sessao?.papel !== 'equipe') return; // bloco continua display:none
+
+  bloco.style.display = '';
+  window.db.getPreferenciaEmailAgendamentos().then(ativado => {
+    toggle.checked = ativado;
+  });
+
+  toggle.addEventListener('change', async () => {
+    await window.db.salvarPreferenciaEmailAgendamentos(toggle.checked);
+    mostrarToast(toggle.checked ? 'E-mail de novo agendamento ativado.' : 'E-mail de novo agendamento desativado.', 'sucesso');
   });
 }
 
@@ -522,6 +610,30 @@ const TAMANHOS_IMAGEM_CDN = {
   banner: { largura: 1600 },                                    // .capa-barbearia: largura total, até 420px de altura
 };
 
+// Pixel transparente usado como src inicial das imagens que dependem do
+// banco (avatar, capa). Assim nenhuma imagem "de exemplo" aparece por uns
+// instantes antes da imagem verdadeira chegar.
+const PIXEL_TRANSPARENTE = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+/**
+ * Troca o src de uma <img> e só revela a imagem (tirando a classe
+ * .img-carregando, que mostra um esqueleto animado) quando ela terminar
+ * de carregar. Se o carregamento falhar, o onerror do próprio HTML decide
+ * o que mostrar e o 'load' seguinte revela o resultado.
+ */
+function trocarImagemQuandoPronta(img, src) {
+  if (!img) return;
+  img.addEventListener('load', () => img.classList.remove('img-carregando'), { once: true });
+  img.src = src;
+}
+
+/** Preenche um texto vindo do banco e remove o esqueleto de carregamento. */
+function preencherTextoCarregado(el, texto) {
+  if (!el) return;
+  el.textContent = texto;
+  el.classList.remove('skeleton', 'skeleton-linha');
+}
+
 function resolverAsset(valor, fallback = 'assets/img/avatar-exemplo.jpg', redimensionar = null) {
   const caminho = valor || fallback;
   if (/^(data:|blob:)/.test(caminho)) return caminho;
@@ -611,6 +723,7 @@ async function menuPrincipal() {
     return [
       { nav: 'inicio', href: rota('painel-barbeiro.html'), icon: 'bi-house-door', label: 'Início' },
       { nav: 'agenda', href: rota('agendamentos.html'), icon: 'bi-calendar3', label: 'Agenda' },
+      { nav: 'localizacao', href: rota('localizacao.html'), icon: 'bi-geo-alt', label: 'Localização' },
       { nav: 'perfil', href: perfilHref, icon: 'bi-person', label: 'Perfil' },
       { nav: 'config', href: rota('preferencias-app.html'), icon: 'bi-gear', label: 'Ajustes' },
     ];
@@ -686,6 +799,12 @@ async function padronizarMenus() {
   }
   const itensInferior = await menuInferior();
   if (inferior) inferior.innerHTML = itensInferior.map(bottomMarkup).join('');
+
+  // Só revela o menu (ver regra "Anti-flicker da navegação" no CSS)
+  // depois que todo o conteúdo acima já foi montado com os itens certos
+  // pra esta sessão — evita mostrar o menu genérico (o do HTML estático)
+  // nem por um instante antes de trocar para o de equipe/cliente.
+  document.documentElement.classList.add('nav-pronta');
 }
 
 function marcarNavAtiva() {
@@ -773,8 +892,8 @@ function formatarMoeda(valor) {
 const SERVICOS_FALLBACK = {
   '1': { nome: 'Barba', preco: 20 },
   '2': { nome: 'Corte e Barba', preco: 45 },
-  '3': { nome: 'Corte Padrao', preco: 30 },
-  '4': { nome: 'Degrade', preco: 35 },
+  '3': { nome: 'Corte Padrão', preco: 30 },
+  '4': { nome: 'Degradê', preco: 35 },
   '5': { nome: 'Pigmento', preco: 30 },
   '6': { nome: 'Sobrancelha', preco: 20 },
   '7': { nome: 'Reflexo', preco: 55 },
@@ -866,11 +985,16 @@ function atualizarBarraSelecao() {
 /* ==========================================================================
    SERVIÇOS EM DESTAQUE — Edição no Painel do Barbeiro (reflete na Home)
    ========================================================================== */
-function iniciarServicosDestaqueEditavel() {
+async function iniciarServicosDestaqueEditavel() {
   const grid = document.getElementById('gridServicosDestaqueEditavel');
   if (!grid || !window.db) return;
 
   const MAX_DESTAQUES = 4;
+  // Só o barbeiro MASTER pode mudar os destaques (mesma regra reforçada
+  // no servidor em servicos.js) — um barbeiro comum ainda vê quais estão
+  // em destaque agora, só não consegue clicar pra mudar.
+  const sessaoAtual = await getSessaoAtual();
+  const ehMaster = Boolean(sessaoAtual?.master);
 
   async function renderizar() {
     const [destaqueIds, servicos] = await Promise.all([
@@ -879,29 +1003,31 @@ function iniciarServicosDestaqueEditavel() {
     ]);
     const destacados = new Set(destaqueIds);
     grid.innerHTML = servicos.map(servico => `
-      <button type="button" class="chip-servico${destacados.has(servico.id) ? ' selecionado' : ''}" data-servico-destaque-id="${servico.id}">
+      <button type="button" class="chip-servico${destacados.has(servico.id) ? ' selecionado' : ''}" data-servico-destaque-id="${servico.id}"${ehMaster ? '' : ' disabled'}>
         ${escaparHtml(servico.nome)}<small>${formatarMoeda(servico.preco)}</small>
       </button>
     `).join('');
   }
 
-  grid.addEventListener('click', async (ev) => {
-    const btn = ev.target.closest('[data-servico-destaque-id]');
-    if (!btn) return;
+  if (ehMaster) {
+    grid.addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('[data-servico-destaque-id]');
+      if (!btn) return;
 
-    const atual = await window.db.getServicosDestaque();
-    const id = btn.dataset.servicoDestaqueId;
-    const jaSelecionado = atual.includes(id);
+      const atual = await window.db.getServicosDestaque();
+      const id = btn.dataset.servicoDestaqueId;
+      const jaSelecionado = atual.includes(id);
 
-    if (!jaSelecionado && atual.length >= MAX_DESTAQUES) {
-      mostrarToast(`Escolha no máximo ${MAX_DESTAQUES} serviços em destaque.`, 'erro');
-      return;
-    }
+      if (!jaSelecionado && atual.length >= MAX_DESTAQUES) {
+        mostrarToast(`Escolha no máximo ${MAX_DESTAQUES} serviços em destaque.`, 'erro');
+        return;
+      }
 
-    const novaLista = jaSelecionado ? atual.filter(item => item !== id) : [...atual, id];
-    await window.db.salvarServicosDestaque(novaLista);
-    renderizar();
-  });
+      const novaLista = jaSelecionado ? atual.filter(item => item !== id) : [...atual, id];
+      await window.db.salvarServicosDestaque(novaLista);
+      renderizar();
+    });
+  }
 
   window.addEventListener('bp:servicos-alterados', renderizar);
 
@@ -911,7 +1037,7 @@ function iniciarServicosDestaqueEditavel() {
 /* ==========================================================================
    GERENCIAR SERVIÇOS — CRUD no Painel do Barbeiro (somente equipe)
    ========================================================================== */
-function iniciarGerenciarServicos() {
+async function iniciarGerenciarServicos() {
   const lista = document.getElementById('listaServicosGerenciar');
   const form = document.getElementById('formServico');
   if (!lista || !form || !window.db) return;
@@ -923,6 +1049,16 @@ function iniciarGerenciarServicos() {
   const inputPreco = document.getElementById('servicoPreco');
   const inputDuracao = document.getElementById('servicoDuracao');
   const inputDescricao = document.getElementById('servicoDescricao');
+  // Gerenciar o catálogo (criar/editar/excluir) é só do barbeiro MASTER —
+  // um barbeiro comum vê a lista, sem os botões de ação (o servidor já
+  // recusa a chamada mesmo assim — ver servicos.js — mas mostrar um botão
+  // que sempre dá erro 403 só confunde). Buscado ANTES de qualquer outra
+  // coisa nesta function, pra `renderizarLista()` já nascer com o valor
+  // certo (closures em JS enxergam o valor atual da variável no momento
+  // em que rodam, não o valor de quando foram definidas — então só
+  // precisa estar certo antes da primeira chamada de verdade acontecer).
+  const sessaoAtual = await getSessaoAtual();
+  const ehMaster = Boolean(sessaoAtual?.master);
 
   async function renderizarLista() {
     const servicos = await window.db.getServicos();
@@ -936,10 +1072,11 @@ function iniciarGerenciarServicos() {
               <div class="texto-suave small mt-1">${formatarMoeda(s.preco)} · ${s.duracaoMin || 30} min</div>
             </div>
           </div>
+          ${ehMaster ? `
           <div class="acoes-agendamento-barbeiro">
             <button type="button" class="btn-acao-agenda" data-acao-servico="editar" data-servico-id="${s.id}"><i class="bi bi-pencil"></i> Editar</button>
             <button type="button" class="btn-acao-agenda perigo" data-acao-servico="excluir" data-servico-id="${s.id}"><i class="bi bi-trash3"></i> Excluir</button>
-          </div>
+          </div>` : ''}
         </div>
       `).join('')
       : listaVazia('Nenhum serviço cadastrado.');
@@ -964,7 +1101,10 @@ function iniciarGerenciarServicos() {
   }
 
   const btnNovo = document.getElementById('btnNovoServico');
-  if (btnNovo) btnNovo.addEventListener('click', abrirParaCriar);
+  if (btnNovo) {
+    btnNovo.style.display = ehMaster ? '' : 'none';
+    btnNovo.addEventListener('click', abrirParaCriar);
+  }
 
   lista.addEventListener('click', async (ev) => {
     const btn = ev.target.closest('[data-acao-servico]');
@@ -1005,6 +1145,12 @@ function iniciarGerenciarServicos() {
 
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    // Defesa extra: mesmo sem o botão "Novo serviço" nem os botões de
+    // editar visíveis, se por algum motivo este formulário for enviado
+    // (ex.: Enter num campo, modal deixado aberto de antes), não deixa
+    // seguir — o servidor recusaria de qualquer forma (servicos.js), mas
+    // aqui evita a chamada de rede e o erro 403 desnecessário.
+    if (!ehMaster) return;
     const id = inputId.value;
     const dados = {
       nome: inputNome.value.trim(),
@@ -1168,7 +1314,10 @@ async function iniciarLocalizacao() {
     // mandasse a chamada à API direto. escaparHtml() aqui evita que esse
     // valor "quebre" o atributo src="" e injete HTML/JS — mesmo já
     // validando no backend, mantemos essa camada extra no front-end.
-    if (bloco.icone) return `<img src="${escaparHtml(resolverAsset(bloco.icone, undefined, TAMANHOS_IMAGEM_CDN.iconeInfo))}" alt="" class="bloco-info-icone-img">`;
+    if (bloco.icone) {
+      const classeFormato = bloco.formato === 'circulo' ? ' formato-circulo' : '';
+      return `<img src="${escaparHtml(resolverAsset(bloco.icone, undefined, TAMANHOS_IMAGEM_CDN.iconeInfo))}" alt="" class="bloco-info-icone-img${classeFormato}">`;
+    }
     return `<i class="bi ${bloco.iconeBootstrap || 'bi-info-circle'} fs-4 texto-dourado d-block"></i>`;
   }
 
@@ -1182,11 +1331,21 @@ async function iniciarLocalizacao() {
     `).join('');
   }
 
+  const mapaWrap = document.getElementById('mapaLocalizacaoWrap');
+
   async function preencherExibicao() {
     const endereco = await window.db.getEnderecoBarbearia();
-    linha1El.textContent = endereco.linha1;
-    if (linha2El) linha2El.textContent = endereco.linha2;
-    if (mapaIframe) mapaIframe.src = `https://www.google.com/maps?q=${encodeURIComponent(endereco.mapaBusca)}&output=embed`;
+    // Nada aqui é texto fixo do HTML: tudo vem do banco. Se o master ainda
+    // não cadastrou o endereço, a linha 1 avisa em vez de ficar vazia.
+    preencherTextoCarregado(linha1El, endereco.linha1 || 'Endereço ainda não cadastrado.');
+    preencherTextoCarregado(linha2El, endereco.linha2);
+    if (mapaIframe && endereco.mapaBusca) {
+      mapaIframe.src = `https://www.google.com/maps?q=${encodeURIComponent(endereco.mapaBusca)}&output=embed`;
+    }
+    if (mapaWrap) {
+      mapaWrap.classList.remove('skeleton');
+      mapaWrap.style.display = endereco.mapaBusca ? '' : 'none';
+    }
     renderizarBlocosDisplay(endereco.infoBlocos);
     return endereco;
   }
@@ -1194,7 +1353,10 @@ async function iniciarLocalizacao() {
   await preencherExibicao();
 
   const sessao = await getSessaoAtual();
-  if (sessao?.papel !== 'equipe' || !form) return;
+  // Editar endereço/informações é só do barbeiro MASTER — um barbeiro
+  // comum só vê a página, sem os controles de edição (mesma regra
+  // reforçada no servidor em netlify/functions/config.js).
+  if (sessao?.papel !== 'equipe' || !sessao?.master || !form) return;
 
   if (acoesEquipe) acoesEquipe.style.display = '';
 
@@ -1204,29 +1366,44 @@ async function iniciarLocalizacao() {
     linha.className = 'd-flex align-items-center gap-2';
     linha.dataset.blocoIcone = bloco.icone || '';
     linha.dataset.blocoIconeBootstrap = bloco.iconeBootstrap || 'bi-info-circle';
+    linha.dataset.blocoFormato = bloco.formato === 'circulo' ? 'circulo' : 'quadrado';
+    const classeFormatoInicial = linha.dataset.blocoFormato === 'circulo' ? ' formato-circulo' : '';
     linha.innerHTML = `
-      <img src="${bloco.icone ? escaparHtml(resolverAsset(bloco.icone, undefined, TAMANHOS_IMAGEM_CDN.iconeInfo)) : ''}" alt="" class="bloco-info-icone-preview" data-bloco-preview style="${bloco.icone ? '' : 'display:none;'}">
+      <img src="${bloco.icone ? escaparHtml(resolverAsset(bloco.icone, undefined, TAMANHOS_IMAGEM_CDN.iconeInfo)) : ''}" alt="" class="bloco-info-icone-preview${classeFormatoInicial}" data-bloco-preview style="${bloco.icone ? '' : 'display:none;'}">
       <i class="bi ${bloco.iconeBootstrap || 'bi-info-circle'} fs-4 texto-dourado" data-bloco-preview-padrao style="${bloco.icone ? 'display:none;' : ''}"></i>
       <input type="text" class="input-prime flex-grow-1" value="${escaparHtml(bloco.texto || '')}" placeholder="Ex.: Aceita cartão" data-bloco-texto>
+      <button type="button" class="btn btn-sm btn-outline-secondary px-2" title="Alternar entre quadrado e círculo" data-bloco-alternar-formato>
+        <i class="bi ${linha.dataset.blocoFormato === 'circulo' ? 'bi-circle' : 'bi-square'}"></i>
+      </button>
       <label class="btn-outline-prime mb-0 px-2 py-1" title="Trocar ícone" style="cursor:pointer;">
         <i class="bi bi-image"></i>
         <input type="file" accept="image/*" class="visually-hidden" data-bloco-icone-input>
       </label>
       <button type="button" class="btn btn-sm text-danger" title="Remover" data-bloco-remover><i class="bi bi-trash3"></i></button>
     `;
-    linha.querySelector('[data-bloco-icone-input]').addEventListener('change', (ev) => {
+    linha.querySelector('[data-bloco-icone-input]').addEventListener('change', async (ev) => {
       const arquivo = ev.target.files[0];
+      ev.target.value = '';
       if (!arquivo) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        linha.dataset.blocoNovoIcone = e.target.result;
-        const preview = linha.querySelector('[data-bloco-preview]');
-        const previewPadrao = linha.querySelector('[data-bloco-preview-padrao]');
-        preview.src = e.target.result;
-        preview.style.display = '';
-        previewPadrao.style.display = 'none';
-      };
-      reader.readAsDataURL(arquivo);
+      const recorte = await abrirEditorRecorte(arquivo, {
+        proporcao: 1,
+        larguraSaida: 240,
+        circular: linha.dataset.blocoFormato === 'circulo',
+        formatoSaida: 'image/png',
+      });
+      if (!recorte) return; // cancelado no editor
+      linha.dataset.blocoNovoIcone = recorte;
+      const preview = linha.querySelector('[data-bloco-preview]');
+      const previewPadrao = linha.querySelector('[data-bloco-preview-padrao]');
+      preview.src = recorte;
+      preview.style.display = '';
+      previewPadrao.style.display = 'none';
+    });
+    linha.querySelector('[data-bloco-alternar-formato]').addEventListener('click', (ev) => {
+      const novoFormato = linha.dataset.blocoFormato === 'circulo' ? 'quadrado' : 'circulo';
+      linha.dataset.blocoFormato = novoFormato;
+      linha.querySelector('[data-bloco-preview]').classList.toggle('formato-circulo', novoFormato === 'circulo');
+      ev.currentTarget.querySelector('i').className = novoFormato === 'circulo' ? 'bi bi-circle' : 'bi bi-square';
     });
     linha.querySelector('[data-bloco-remover]').addEventListener('click', () => linha.remove());
     return linha;
@@ -1296,7 +1473,7 @@ async function iniciarLocalizacao() {
         const url = await window.db.enviarIconeInfoLocalizacao(linha.dataset.blocoNovoIcone);
         if (url) icone = url;
       }
-      infoBlocos.push({ texto, icone, iconeBootstrap: linha.dataset.blocoIconeBootstrap || 'bi-info-circle' });
+      infoBlocos.push({ texto, icone, iconeBootstrap: linha.dataset.blocoIconeBootstrap || 'bi-info-circle', formato: linha.dataset.blocoFormato === 'circulo' ? 'circulo' : 'quadrado' });
     }
 
     const dados = {
@@ -1322,14 +1499,40 @@ async function iniciarLocalizacao() {
    BANNER DA BARBEARIA — Upload no Painel do Barbeiro (reflete na Home)
    ========================================================================== */
 async function aplicarBannerSalvo() {
-  const banner = window.db?.getBannerBarbearia ? await window.db.getBannerBarbearia() : null;
-  if (!banner) return;
-  const bannerRedimensionado = resolverAsset(banner, banner, TAMANHOS_IMAGEM_CDN.banner);
+  // A capa só aparece depois que o banco responde. Se não houver banner
+  // salvo (ou a consulta falhar), usa a imagem que acompanha o site.
+  let banner = null;
+  try {
+    banner = window.db?.getBannerBarbearia ? await window.db.getBannerBarbearia() : null;
+  } catch (e) {
+    banner = null;
+  }
+  const bannerRedimensionado = banner
+    ? resolverAsset(banner, banner, TAMANHOS_IMAGEM_CDN.banner)
+    : resolverAsset('assets/img/capa-barbearia.jpg');
   document.querySelectorAll('.capa-barbearia').forEach(img => {
-    img.src = bannerRedimensionado;
     img.style.display = '';
+    trocarImagemQuandoPronta(img, bannerRedimensionado);
   });
   await aplicarAjusteBanner();
+}
+
+/**
+ * Rótulo do topo da Home e do Painel: "Barbearia · Cidade, UF".
+ * A cidade e o estado saem do endereço cadastrado pelo barbeiro master na
+ * tela de Localização (db.getEnderecoBarbearia().localidade), então mudam
+ * junto com ele. Enquanto o banco não responde, o HTML mostra só
+ * "Barbearia", que vale para qualquer endereço.
+ */
+async function aplicarRotuloLocalidade() {
+  const el = document.getElementById('heroLocalidade');
+  if (!el || !window.db?.getEnderecoBarbearia) return;
+  try {
+    const { localidade } = await window.db.getEnderecoBarbearia();
+    el.textContent = localidade ? `Barbearia · ${localidade}` : 'Barbearia';
+  } catch (e) {
+    // sem conexão e sem cache: mantém o "Barbearia" do HTML
+  }
 }
 
 /**
@@ -1348,11 +1551,20 @@ async function aplicarAjusteBanner() {
   });
 }
 
-function iniciarUploadBanner() {
+async function iniciarUploadBanner() {
   const btn = document.getElementById('btnAlterarBanner');
   const input = document.getElementById('inputBannerBarbearia');
   const imgAlvo = document.getElementById('capaBarbeariaImg');
   if (!btn || !input || !imgAlvo) return;
+
+  // Trocar o banner é só do barbeiro MASTER (mesma regra reforçada no
+  // servidor em upload.js) — some o botão pra um barbeiro comum, em vez
+  // de deixar clicar e ganhar um erro 403.
+  const sessaoAtual = await getSessaoAtual();
+  if (!sessaoAtual?.master) {
+    btn.style.display = 'none';
+    return;
+  }
 
   const modalEl = document.getElementById('modalEscolhaBanner');
   const preview = document.getElementById('previewEscolhaBanner');
@@ -1367,7 +1579,7 @@ function iniciarUploadBanner() {
     await aplicarBannerSalvo();
   }
 
-  input.addEventListener('change', () => {
+  input.addEventListener('change', async () => {
     const arquivo = input.files[0];
     if (!arquivo) return;
 
@@ -1377,34 +1589,37 @@ function iniciarUploadBanner() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const base64 = ev.target.result;
-
-      // Sem o modal de escolha (markup ausente nesta página) cai no
-      // comportamento anterior: aplica direto com o recorte recomendado.
-      if (!modalEl || !window.bootstrap) {
-        confirmarEnvio(base64, 'cortar');
-        input.value = '';
-        return;
-      }
-
-      if (preview) preview.src = base64;
-      const instancia = new window.bootstrap.Modal(modalEl);
-
-      const aoEscolher = (ajuste) => async () => {
-        instancia.hide();
-        await confirmarEnvio(base64, ajuste);
-      };
-      // {once:true} evita empilhar handlers se o barbeiro trocar de foto
-      // mais de uma vez sem recarregar a página.
-      btnCortar?.addEventListener('click', aoEscolher('cortar'), { once: true });
-      btnManter?.addEventListener('click', aoEscolher('original'), { once: true });
-
-      instancia.show();
+    // Sem o modal de escolha (markup ausente nesta página), aplica o
+    // recorte padrão direto, sem perguntar.
+    if (!modalEl || !window.bootstrap) {
+      const recorte = await abrirEditorRecorte(arquivo, { proporcao: 3, larguraSaida: 1200, formatoSaida: 'image/jpeg' });
       input.value = '';
-    };
-    reader.readAsDataURL(arquivo);
+      if (recorte) await confirmarEnvio(recorte, 'cortar');
+      return;
+    }
+
+    const dataUrlOriginal = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => resolve(ev.target.result);
+      reader.readAsDataURL(arquivo);
+    });
+    if (preview) preview.src = dataUrlOriginal;
+    const instancia = new window.bootstrap.Modal(modalEl);
+
+    // {once:true} evita empilhar handlers se o barbeiro trocar de foto
+    // mais de uma vez sem recarregar a página.
+    btnCortar?.addEventListener('click', async () => {
+      instancia.hide();
+      const recorte = await abrirEditorRecorte(arquivo, { proporcao: 3, larguraSaida: 1200, formatoSaida: 'image/jpeg' });
+      if (recorte) await confirmarEnvio(recorte, 'cortar');
+    }, { once: true });
+    btnManter?.addEventListener('click', async () => {
+      instancia.hide();
+      await confirmarEnvio(dataUrlOriginal, 'original');
+    }, { once: true });
+
+    instancia.show();
+    input.value = '';
   });
 }
 
@@ -1413,7 +1628,12 @@ function iniciarUploadBanner() {
    ========================================================================== */
 function formatarData(iso) {
   if (!iso) return '';
-  const [y, m, d] = iso.split('-').map(Number);
+  // slice(0, 10) pega só "AAAA-MM-DD", mesmo se `iso` vier com hora/fuso
+  // junto (ex.: "2026-09-25T00:00:00.000Z" — é assim que o Postgres às
+  // vezes devolve uma coluna DATE depois de passar pelo driver e virar
+  // JSON). Sem isso, o split('-') pegava o pedaço errado e a tela
+  // mostrava algo como "25T00:00:00.000Z" no lugar do dia.
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
   const data = new Date(y, m - 1, d);
   const diasSemana = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
   const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
@@ -1422,13 +1642,14 @@ function formatarData(iso) {
 
 function formatarDataCurta(iso) {
   if (!iso) return '';
-  const [ano, mes, dia] = iso.split('-');
+  // Mesmo cuidado de formatarData() acima — ver o comentário lá.
+  const [ano, mes, dia] = iso.slice(0, 10).split('-');
   return `${dia}/${mes}/${ano}`;
 }
 
 async function nomesServicos(servicoIds) {
   const dados = await servicosDados();
-  return (servicoIds || []).map(id => dados[id]?.nome).filter(Boolean).join(' + ') || 'Servico';
+  return (servicoIds || []).map(id => dados[id]?.nome).filter(Boolean).join(' + ') || 'Serviço';
 }
 
 /**
@@ -1642,6 +1863,198 @@ function iniciarSalvarPreferenciasCorte() {
 }
 
 /* ==========================================================================
+   EDITOR DE RECORTE DE IMAGEM — arrastar pra posicionar + zoom
+   ==========================================================================
+   Reutilizado pelo avatar (quadrado), pelo banner do painel (retangular
+   bem largo) e pelos ícones de blocos de informação da Localização
+   (quadrado, com prévia redonda ou de cantos arredondados conforme o
+   formato escolhido). O arquivo final SEMPRE sai retangular — a "forma"
+   redonda de um avatar ou ícone é sempre aplicada depois, via CSS
+   (border-radius), por quem exibe a imagem; não precisa (e não compensa)
+   gravar uma máscara circular nos pixels de verdade.
+   ========================================================================== */
+
+/**
+ * @param {File} arquivo Imagem escolhida pela pessoa.
+ * @param {Object} opcoes
+ *   proporcao — largura/altura do recorte final (1 = quadrado, 3 = faixa larga tipo banner)
+ *   larguraSaida — resolução horizontal do arquivo exportado, em pixels
+ *   circular — true só muda a PRÉVIA (janela de recorte redonda); o
+ *     arquivo exportado continua retangular de qualquer forma
+ *   formatoSaida — 'image/jpeg' (fotos, arquivo menor) ou 'image/png'
+ *     (ícones simples, preserva transparência se houver)
+ * @returns {Promise<string|null>} dataURL do recorte, ou null se cancelado
+ */
+function abrirEditorRecorte(arquivo, opcoes = {}) {
+  const {
+    proporcao = 1,
+    larguraSaida = 480,
+    circular = false,
+    formatoSaida = 'image/jpeg',
+  } = opcoes;
+  const alturaSaida = Math.round(larguraSaida / proporcao);
+
+  return new Promise((resolve) => {
+    const larguraViewport = Math.round(Math.min(320, window.innerWidth - 64));
+    const alturaViewport = Math.round(larguraViewport / proporcao);
+
+    const modalEl = document.createElement('div');
+    modalEl.className = 'modal fade';
+    modalEl.tabIndex = -1;
+    modalEl.setAttribute('aria-hidden', 'true');
+    modalEl.innerHTML = `
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content modal-prime">
+          <div class="modal-header">
+            <h2 class="modal-title fs-5 fonte-display">Ajustar imagem</h2>
+            <button type="button" class="btn-close" aria-label="Fechar" data-recorte-cancelar></button>
+          </div>
+          <div class="modal-body text-center">
+            <div class="recorte-viewport${circular ? ' recorte-circular' : ''}" style="width:${larguraViewport}px;height:${alturaViewport}px;">
+              <img alt="Prévia da imagem a recortar">
+            </div>
+            <input type="range" class="recorte-zoom-slider mt-3" min="100" max="300" value="100" aria-label="Zoom">
+            <p class="texto-suave small mt-2 mb-0">Arraste a imagem para posicionar. Use o controle para aproximar.</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-recorte-cancelar>Cancelar</button>
+            <button type="button" class="btn-prime" data-recorte-confirmar>Usar esta imagem</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modalEl);
+
+    const viewport = modalEl.querySelector('.recorte-viewport');
+    const imgEl = modalEl.querySelector('img');
+    const slider = modalEl.querySelector('.recorte-zoom-slider');
+    const instancia = window.bootstrap ? new window.bootstrap.Modal(modalEl) : null;
+
+    let escalaBase = 1;   // escala mínima pra cobrir o viewport inteiro (zoom 100% no slider)
+    let escalaZoom = 1;   // multiplicador adicional do slider (1x a 3x)
+    let offsetX = 0;
+    let offsetY = 0;
+    let carregada = false;
+
+    function tamanhoExibido() {
+      const escalaTotal = escalaBase * escalaZoom;
+      return { largura: imgEl.naturalWidth * escalaTotal, altura: imgEl.naturalHeight * escalaTotal, escalaTotal };
+    }
+
+    function limitarOffset() {
+      const { largura, altura } = tamanhoExibido();
+      const maxX = Math.max(0, (largura - larguraViewport) / 2);
+      const maxY = Math.max(0, (altura - alturaViewport) / 2);
+      offsetX = Math.min(maxX, Math.max(-maxX, offsetX));
+      offsetY = Math.min(maxY, Math.max(-maxY, offsetY));
+    }
+
+    function redesenhar() {
+      const { largura, altura } = tamanhoExibido();
+      imgEl.style.width = `${largura}px`;
+      imgEl.style.height = `${altura}px`;
+      imgEl.style.left = `${(larguraViewport - largura) / 2 + offsetX}px`;
+      imgEl.style.top = `${(alturaViewport - altura) / 2 + offsetY}px`;
+    }
+
+    imgEl.onload = () => {
+      carregada = true;
+      // "cover": a escala mínima que faz a imagem cobrir o viewport
+      // inteiro nas duas dimensões (a maior das duas razões vence).
+      escalaBase = Math.max(larguraViewport / imgEl.naturalWidth, alturaViewport / imgEl.naturalHeight);
+      escalaZoom = 1;
+      offsetX = 0;
+      offsetY = 0;
+      slider.value = 100;
+      redesenhar();
+    };
+    imgEl.onerror = () => {
+      // Arquivo não é uma imagem de verdade (ou está corrompido) — sem
+      // isso, "Confirmar" ficaria clicável mesmo com a imagem nunca tendo
+      // carregado, gerando um recorte quebrado (largura/altura zeradas).
+      mostrarToast('Não foi possível abrir essa imagem.', 'erro');
+      if (instancia) instancia.hide(); else finalizar(null);
+    };
+    imgEl.src = URL.createObjectURL(arquivo);
+
+    // Arrastar (mouse e toque, via Pointer Events — unifica os dois sem
+    // precisar de dois conjuntos de listeners separados).
+    let arrastando = false;
+    let inicioPointer = { x: 0, y: 0 };
+    let inicioOffset = { x: 0, y: 0 };
+
+    viewport.addEventListener('pointerdown', (ev) => {
+      if (!carregada) return;
+      arrastando = true;
+      inicioPointer = { x: ev.clientX, y: ev.clientY };
+      inicioOffset = { x: offsetX, y: offsetY };
+      viewport.setPointerCapture(ev.pointerId);
+    });
+    viewport.addEventListener('pointermove', (ev) => {
+      if (!arrastando) return;
+      offsetX = inicioOffset.x + (ev.clientX - inicioPointer.x);
+      offsetY = inicioOffset.y + (ev.clientY - inicioPointer.y);
+      limitarOffset();
+      redesenhar();
+    });
+    const pararArraste = () => { arrastando = false; };
+    viewport.addEventListener('pointerup', pararArraste);
+    viewport.addEventListener('pointercancel', pararArraste);
+
+    slider.addEventListener('input', () => {
+      if (!carregada) return;
+      escalaZoom = Number(slider.value) / 100;
+      limitarOffset();
+      redesenhar();
+    });
+
+    function finalizar(resultado) {
+      URL.revokeObjectURL(imgEl.src);
+      modalEl.remove();
+      resolve(resultado);
+    }
+
+    // Único caminho de finalização de verdade: sempre espera o evento de
+    // "modal terminou de fechar" do Bootstrap (dispara tanto por um clique
+    // em Cancelar/Confirmar quanto pelo fundo escurecido ou Esc) — em vez
+    // de remover o modal direto na hora do clique, o que arriscaria tirar
+    // o elemento do DOM enquanto a animação de fechar do Bootstrap ainda
+    // estivesse mexendo nele.
+    let resultadoPendente = null;
+    modalEl.addEventListener('hidden.bs.modal', () => finalizar(resultadoPendente));
+
+    modalEl.querySelectorAll('[data-recorte-cancelar]').forEach(btn => {
+      btn.addEventListener('click', () => instancia ? instancia.hide() : finalizar(null));
+    });
+
+    modalEl.querySelector('[data-recorte-confirmar]').addEventListener('click', () => {
+      if (!carregada) return; // ainda carregando (ou falhou) — nada pra recortar ainda
+      const { escalaTotal } = tamanhoExibido();
+      // Converte a janela visível (em espaço de tela) de volta pro
+      // espaço de pixels ORIGINAIS da imagem, pra recortar do arquivo de
+      // verdade (não de uma versão já reduzida na tela).
+      const imgLeft = (larguraViewport - imgEl.naturalWidth * escalaTotal) / 2 + offsetX;
+      const imgTop = (alturaViewport - imgEl.naturalHeight * escalaTotal) / 2 + offsetY;
+      const origemX = -imgLeft / escalaTotal;
+      const origemY = -imgTop / escalaTotal;
+      const origemLargura = larguraViewport / escalaTotal;
+      const origemAltura = alturaViewport / escalaTotal;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = larguraSaida;
+      canvas.height = alturaSaida;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(imgEl, origemX, origemY, origemLargura, origemAltura, 0, 0, larguraSaida, alturaSaida);
+      resultadoPendente = canvas.toDataURL(formatoSaida, 0.9);
+
+      if (instancia) instancia.hide(); else finalizar(resultadoPendente);
+    });
+
+    if (instancia) instancia.show();
+  });
+}
+
+/* ==========================================================================
    AVATAR — Upload e preview
    ========================================================================== */
 function iniciarPreviewAvatar() {
@@ -1652,7 +2065,7 @@ function iniciarPreviewAvatar() {
 
   if (gatilho) gatilho.addEventListener('click', () => input.click());
 
-  input.addEventListener('change', () => {
+  input.addEventListener('change', async () => {
     const arquivo = input.files[0];
     if (!arquivo) return;
 
@@ -1662,13 +2075,17 @@ function iniciarPreviewAvatar() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const base64 = e.target.result;
-      preview.src = base64;
-      preview.dataset.base64 = base64;
-    };
-    reader.readAsDataURL(arquivo);
+    const recorte = await abrirEditorRecorte(arquivo, {
+      proporcao: 1,
+      larguraSaida: 480,
+      circular: true,
+      formatoSaida: 'image/jpeg',
+    });
+    input.value = '';
+    if (!recorte) return; // cancelado no editor
+
+    preview.src = recorte;
+    preview.dataset.base64 = recorte;
   });
 }
 
@@ -1697,14 +2114,14 @@ async function carregarDadosPerfil() {
   const acoesCliente = document.getElementById('perfilAcoesCliente');
   const acoesEquipe = document.getElementById('perfilAcoesEquipe');
 
-  if (nomeDisplay) nomeDisplay.textContent = sessao.nome;
-  if (nomeCampo) nomeCampo.textContent = sessao.nome;
-  if (emailDisplay) emailDisplay.textContent = sessao.email;
-  if (avatarDisplay) avatarDisplay.src = resolverAsset(sessao.avatar, undefined, TAMANHOS_IMAGEM_CDN.avatarPerfil);
+  preencherTextoCarregado(nomeDisplay, sessao.nome);
+  preencherTextoCarregado(nomeCampo, sessao.nome);
+  preencherTextoCarregado(emailDisplay, sessao.email);
+  if (avatarDisplay) trocarImagemQuandoPronta(avatarDisplay, resolverAsset(sessao.avatar, undefined, TAMANHOS_IMAGEM_CDN.avatarPerfil));
   if (nomeEdit) nomeEdit.value = sessao.nome;
   if (emailEdit) emailEdit.value = sessao.email;
   if (avatarEdit) {
-    avatarEdit.src = resolverAsset(sessao.avatar, undefined, TAMANHOS_IMAGEM_CDN.avatarPerfil);
+    trocarImagemQuandoPronta(avatarEdit, resolverAsset(sessao.avatar, undefined, TAMANHOS_IMAGEM_CDN.avatarPerfil));
     avatarEdit.dataset.base64 = sessao.avatar || '';
   }
 
@@ -1712,6 +2129,11 @@ async function carregarDadosPerfil() {
   // linka pra cá) — "Próximo agendamento", "Preferências de Corte" e "Meus
   // Agendamentos" só fazem sentido pra quem agenda um corte pra si mesmo.
   const ehEquipe = sessao.papel === 'equipe';
+  // Hierarquia dentro da equipe: só o barbeiro MASTER convida colega novo
+  // e edita endereço/localização — um barbeiro comum só mexe na própria
+  // agenda (ver netlify/functions/auth-cadastro.js, config.js — a mesma
+  // regra é reforçada lá; esconder o botão aqui é só conveniência de UX).
+  const ehMaster = ehEquipe && Boolean(sessao.master);
   if (acoesCliente) acoesCliente.style.display = ehEquipe ? 'none' : '';
   if (acoesEquipe) acoesEquipe.style.display = ehEquipe ? '' : 'none';
   if (proximoCard) proximoCard.style.display = ehEquipe ? 'none' : '';
@@ -1719,13 +2141,24 @@ async function carregarDadosPerfil() {
   if (proximoDisplay && !ehEquipe) {
     const proximo = await window.db.getProximoAgendamento(sessao.usuarioId);
     proximoDisplay.textContent = proximo
-      ? `${formatarDataCurta(proximo.data)} as ${proximo.hora} - ${await nomesServicosDoAgendamento(proximo)}`
+      ? `${formatarDataCurta(proximo.data)} às ${proximo.hora} · ${await nomesServicosDoAgendamento(proximo)}`
       : 'Nenhum agendamento futuro.';
   }
 
   const btnCriarBarbeiro = document.getElementById('btnCriarContaBarbeiro');
   if (btnCriarBarbeiro) {
-    btnCriarBarbeiro.style.display = ehEquipe ? '' : 'none';
+    btnCriarBarbeiro.style.display = ehMaster ? '' : 'none';
+  }
+  const linkAlterarLocalizacao = document.getElementById('linkAlterarLocalizacao');
+  if (linkAlterarLocalizacao) {
+    linkAlterarLocalizacao.style.display = ehMaster ? '' : 'none';
+  }
+  // A conta master nunca pode ser excluída (netlify/functions/usuarios.js
+  // recusa mesmo se alguém chamar a API direto) — esconder o botão evita
+  // mostrar uma ação que vai sempre falhar com erro.
+  const btnExcluirConta = document.getElementById('btnExcluirConta');
+  if (btnExcluirConta) {
+    btnExcluirConta.style.display = sessao.master ? 'none' : '';
   }
 }
 
@@ -2055,22 +2488,22 @@ async function iniciarAgendamentosCliente() {
     `;
 
     const [htmlFuturos, htmlPendentes, htmlHistorico] = await Promise.all([
-      futuros.length ? Promise.all(futuros.map(item => renderCardAgendamento(item))).then(cards => cards.join('')) : Promise.resolve(listaVazia('Voce ainda nao tem agendamentos futuros.')),
+      futuros.length ? Promise.all(futuros.map(item => renderCardAgendamento(item))).then(cards => cards.join('')) : Promise.resolve(listaVazia('Você ainda não tem agendamentos futuros.')),
       pendentes.length ? Promise.all(pendentes.map(item => renderCardAgendamento(item))).then(cards => cards.join('')) : Promise.resolve(listaVazia('Nenhum agendamento pendente.')),
-      historico.length ? Promise.all(historico.map(item => renderCardAgendamento(item))).then(cards => cards.join('')) : Promise.resolve(listaVazia('Seu historico ainda esta vazio.')),
+      historico.length ? Promise.all(historico.map(item => renderCardAgendamento(item))).then(cards => cards.join('')) : Promise.resolve(listaVazia('Seu histórico ainda está vazio.')),
     ]);
 
     lista.innerHTML = `
       <div data-conteudo-aba="futuros">
-        <p class="small fw-bold texto-dourado mb-2">Proximos agendamentos</p>
+        <p class="small fw-bold texto-dourado mb-2">Próximos agendamentos</p>
         ${htmlFuturos}
       </div>
       <div data-conteudo-aba="pendentes" style="display:none;">
-        <p class="small fw-bold texto-dourado mb-2">Aguardando confirmacao</p>
+        <p class="small fw-bold texto-dourado mb-2">Aguardando confirmação</p>
         ${htmlPendentes}
       </div>
       <div data-conteudo-aba="historico" style="display:none;">
-        <p class="small fw-bold texto-dourado mb-2">Historico</p>
+        <p class="small fw-bold texto-dourado mb-2">Histórico</p>
         ${htmlHistorico}
       </div>
     `;
@@ -2700,6 +3133,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (document.querySelector('.capa-barbearia')) {
     aplicarBannerSalvo();
   }
+  // "Barbearia · Cidade, UF" acompanha o endereço cadastrado
+  if (document.getElementById('heroLocalidade')) {
+    aplicarRotuloLocalidade();
+  }
   if (document.getElementById('btnAlterarBanner')) {
     iniciarUploadBanner();
   }
@@ -2720,6 +3157,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   if (document.getElementById('notifOfertas')) {
     iniciarToggleOfertas();
+  }
+  if (document.getElementById('notifEmailAgendamentos')) {
+    iniciarToggleEmailAgendamentos();
   }
   if (document.getElementById('somNotificacao')) {
     iniciarSeletorSomNotificacao();

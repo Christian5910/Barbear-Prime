@@ -42,6 +42,15 @@
 
   /* --- Escala de fonte ajustável (Preferências) --- */
   --escala-fonte: 1;
+  /* Aplicada aqui na raiz (:root = <html>), não só no body: `rem` é
+     SEMPRE relativo ao font-size da raiz, nunca ao do body — um
+     elemento com seu próprio font-size em rem (cabeçalho, navbar, ícones
+     do menu inferior, vários breakpoints de tela pequena) ignorava por
+     completo o slider de acessibilidade, porque ele só mexia no body.
+     Escalando a raiz, todo `rem` do site (que é a grande maioria das
+     medidas usadas aqui) acompanha o slider automaticamente, sem precisar
+     caçar cada exceção uma por uma. */
+  font-size: calc(100% * var(--escala-fonte));
 
   --bs-body-font-family: var(--fonte-corpo);
   --bs-body-color: var(--texto-principal);
@@ -117,7 +126,9 @@ body {
   background: var(--bg-app);
   color: var(--texto-principal);
   font-family: var(--fonte-corpo);
-  font-size: calc(1rem * var(--escala-fonte));
+  /* Escala já aplicada na raiz (:root, acima) — aqui é só 1rem puro,
+     senão a escala seria aplicada em dobro (raiz × body). */
+  font-size: 1rem;
   line-height: 1.5;
   min-height: 100vh;
   transition: background-color .25s ease, color .25s ease;
@@ -129,6 +140,64 @@ h1, h2, h3, .fonte-display {
 }
 
 a { color: inherit; text-decoration: none; }
+
+/* ============================================================================
+  Anti-flicker da navegação
+  ============================================================================ */
+/* O menu (topo, hambúrguer e barra inferior) é montado por JavaScript
+   (padronizarMenus() em ui.js) — ele decide os itens certos (equipe vs.
+   cliente) só depois de confirmar a sessão, o que leva um instante. Até
+   lá, o HTML estático de cada página (pensado pra um visitante comum)
+   ficava visível, e trocava de repente para o menu de equipe quando a
+   sessão confirmava — um "pisca" visível toda vez que uma conta de
+   equipe abria a página. Escondido por padrão e revelado só quando a
+   classe `.nav-pronta` for adicionada ao <html> (padronizarMenus() faz
+   isso ao terminar), pra nunca mostrar um menu errado nem por um instante. */
+.nav-desktop,
+.nav-inferior,
+.menu-hamburguer-conteudo {
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+html.nav-pronta .nav-desktop,
+html.nav-pronta .nav-inferior,
+html.nav-pronta .menu-hamburguer-conteudo {
+  opacity: 1;
+}
+
+/* ============================================================================
+  Editor de recorte de imagem (avatar, banner, ícones de localização)
+  ============================================================================
+  Modal montado dinamicamente por abrirEditorRecorte() em ui.js — arrasta
+  pra posicionar, um slider controla o zoom. .recorte-viewport é a "janela"
+  fixa que representa o resultado final; a imagem por trás dela é maior e
+  se move livremente. */
+.recorte-viewport {
+  position: relative;
+  margin: 0 auto;
+  overflow: hidden;
+  background: #000;
+  border-radius: var(--raio-sm);
+  touch-action: none; /* deixa o pointermove cuidar do arrastar, sem o navegador tentar rolar a página junto */
+  cursor: grab;
+}
+.recorte-viewport:active { cursor: grabbing; }
+.recorte-viewport.recorte-circular { border-radius: 50%; }
+.recorte-viewport img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  max-height: none;
+  transform-origin: 0 0;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none; /* o arrastar é tratado no .recorte-viewport (pai), não na própria img */
+}
+.recorte-zoom-slider {
+  width: 100%;
+  accent-color: var(--cor-dourado);
+}
 
 /* ============================================================================
   Shell do aplicativo
@@ -169,7 +238,7 @@ a { color: inherit; text-decoration: none; }
 .nav-desktop {
   display: none;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   margin-left: clamp(8px, 3vw, 32px);
   flex-wrap: nowrap;
   overflow: hidden;
@@ -276,6 +345,15 @@ a { color: inherit; text-decoration: none; }
 .cartao-barbeiro img {
   width: 56px;
   height: 56px;
+  /* aspect-ratio trava a proporção 1:1 não importa o que o layout ao
+     redor tente fazer — mais robusto que só width/height, porque
+     .cartao-barbeiro é flex-direction: column, e sem isso o algoritmo de
+     flexbox podia comprimir a altura da imagem (encolhimento no eixo
+     principal) quando a altura do card fosse igualada por um grid ao
+     redor, virando uma oval em vez de círculo. flex-shrink: 0 reforça o
+     mesmo cuidado especificamente no contexto flex. */
+  aspect-ratio: 1 / 1;
+  flex-shrink: 0;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -349,7 +427,12 @@ a { color: inherit; text-decoration: none; }
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding-bottom: clamp(120px, 14vw, 140px);
+  /* Espaço reservado no fim de toda página, pra nenhum conteúdo ficar
+     grudado na barra inferior fixa (.rodape-fixo, que soma a navegação
+     de baixo + o texto de copyright). Valor generoso de propósito — o
+     objetivo é sempre sobrar uma margem visível entre o último elemento
+     da página e o rodapé, mesmo em telas com bastante conteúdo. */
+  padding-bottom: clamp(150px, 18vw, 180px);
   animation: entrada-tela .32s ease both;
 }
 
@@ -366,6 +449,7 @@ a { color: inherit; text-decoration: none; }
 .selo-barbear {
   width: clamp(36px, 4vw, 44px);
   height: clamp(36px, 4vw, 44px);
+  aspect-ratio: 1 / 1;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, var(--cor-dourado), var(--cor-marrom) 70%);
   display: flex;
@@ -531,6 +615,14 @@ a { color: inherit; text-decoration: none; }
   font-family: inherit;
 }
 .chip-servico small { display: block; font-weight: 500; color: var(--texto-suave); margin-top: 2px; }
+/* :not(.selecionado):not(:disabled) — o estado selecionado já tem o
+   próprio contraste forte (fundo escuro), e um chip desabilitado (barbeiro
+   comum vendo os destaques sem poder editar) não deve parecer clicável. */
+.chip-servico:hover:not(.selecionado):not(:disabled) {
+  border-color: var(--cor-dourado);
+  background: rgba(201, 168, 118, .12);
+}
+.chip-servico:disabled { cursor: not-allowed; opacity: .6; }
 .chip-servico.selecionado {
   background: var(--cor-preto);
   color: var(--cor-creme-claro);
@@ -543,6 +635,10 @@ a { color: inherit; text-decoration: none; }
   background: #2A2A2A;
   border-color: rgba(255, 255, 255, 0.08);
   color: #F5F5F5;
+}
+[data-tema="escuro"] .chip-servico:hover:not(.selecionado):not(:disabled) {
+  border-color: var(--cor-dourado);
+  background: rgba(201, 168, 118, .18);
 }
 [data-tema="escuro"] .chip-servico.selecionado {
   background: var(--cor-dourado);
@@ -695,6 +791,8 @@ a { color: inherit; text-decoration: none; }
 .avatar-circular {
   width: 96px;
   height: 96px;
+  aspect-ratio: 1 / 1;
+  flex-shrink: 0;
   border-radius: 50%;
   object-fit: cover;
   border: 3px solid var(--cor-dourado);
@@ -757,6 +855,7 @@ a { color: inherit; text-decoration: none; }
 .avatar-dot-cliente {
   width: 28px;
   height: 28px;
+  aspect-ratio: 1 / 1;
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid var(--cor-dourado);
@@ -767,17 +866,22 @@ a { color: inherit; text-decoration: none; }
 .bloco-info-icone-img {
   width: 28px;
   height: 28px;
+  aspect-ratio: 1 / 1;
+  flex-shrink: 0;
   object-fit: contain;
   display: block;
   margin: 0 auto;
 }
+.bloco-info-icone-img.formato-circulo { border-radius: 50%; object-fit: cover; }
 .bloco-info-icone-preview {
   width: 30px;
   height: 30px;
+  aspect-ratio: 1 / 1;
   object-fit: cover;
   border-radius: var(--raio-sm);
   flex-shrink: 0;
 }
+.bloco-info-icone-preview.formato-circulo { border-radius: 50%; }
 
 [data-tema="escuro"] .badge-status.confirmado {
   background: rgba(74, 124, 89, 0.25);
@@ -953,6 +1057,8 @@ a { color: inherit; text-decoration: none; }
 .dia-btn {
   width: 36px;
   height: 36px;
+  aspect-ratio: 1 / 1;
+  flex-shrink: 0;
   min-height: 0;
   border-radius: 50%;
   border: 0;
@@ -1257,4 +1363,33 @@ a { color: inherit; text-decoration: none; }
 }
 [data-tema="escuro"] .nav-pills .nav-link:hover {
   color: #F5F5F5;
+}
+
+/* ==========================================================================
+   CARREGANDO DO BANCO — nenhum dado de exemplo aparece antes da hora
+   ========================================================================== */
+/* Imagem à espera do banco: começa com um pixel transparente e mostra o
+   esqueleto animado até a imagem verdadeira terminar de carregar. */
+img.img-carregando {
+  background: linear-gradient(90deg, var(--borda) 25%, rgba(201,168,118,.25) 50%, var(--borda) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+/* Sem src real o pixel de 1x1 ocuparia um quadrado do tamanho da largura
+   toda; então a capa reserva uma faixa larga e fixa até carregar. */
+.capa-barbearia.img-carregando,
+.hero-desktop .capa-barbearia.img-carregando,
+.hero-desktop #capaBarbeariaImg.img-carregando {
+  height: auto;
+  aspect-ratio: 16 / 7;
+  max-height: none;
+  object-fit: cover;
+  border-radius: var(--raio);
+}
+
+/* Linha de texto à espera do banco */
+.skeleton-linha {
+  width: 60%;
+  max-width: 320px;
+  min-height: 1.3em;
 }

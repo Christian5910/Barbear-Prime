@@ -72,8 +72,11 @@ exports.handler = async (event) => {
 
   if (event.httpMethod === 'PUT') {
     const usuario = await getUsuarioDaSessao(event);
-    if (!usuario || usuario.papel !== 'equipe') {
-      return erro(403, 'Apenas a equipe pode alterar a configuração.');
+    // Endereço, banner e blocos de informação da Localização são
+    // configuração da barbearia inteira — só o barbeiro MASTER edita,
+    // não qualquer conta de equipe (mesma regra de servicos.js).
+    if (!usuario || usuario.papel !== 'equipe' || !usuario.master) {
+      return erro(403, 'Apenas o barbeiro master pode alterar a configuração.');
     }
 
     const dados = corpoJson(event);

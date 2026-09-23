@@ -6,7 +6,7 @@
  * Só o próprio usuário (ou a equipe) pode ler/gravar suas preferências.
  */
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJson, idDaRequisicao } = require('./_lib/http');
 const { getUsuarioDaSessao } = require('./_lib/sessao');
 
 function paraApi(linha) {
@@ -21,7 +21,7 @@ function paraApi(linha) {
 }
 
 exports.handler = async (event) => {
-  const usuarioId = event.queryStringParameters?.usuarioId;
+  const usuarioId = idDaRequisicao(event, 'usuarioId');
   if (!usuarioId) return erro(400, 'Informe o usuarioId.');
 
   const usuarioLogado = await getUsuarioDaSessao(event);

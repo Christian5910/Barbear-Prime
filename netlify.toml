@@ -20,9 +20,16 @@
   to = "/.netlify/functions/servicos"
   status = 200
 
+# IMPORTANTE: redirects de :id abaixo usam splat de CAMINHO
+# (".../funcao/:splat"), não mais placeholder virando query string
+# (".../funcao?id=:id"). O segundo formato se mostrou pouco confiável em
+# produção — o Netlify às vezes não preenchia o parâmetro, e a function
+# recebia a chamada sem ID nenhum. Cada function envolvida lê o ID via
+# `idDaRequisicao()` (_lib/http.js), que aceita tanto esse splat de
+# caminho quanto uma query string manual — ver o comentário lá.
 [[redirects]]
-  from = "/api/servicos/:id"
-  to = "/.netlify/functions/servicos?id=:id"
+  from = "/api/servicos/*"
+  to = "/.netlify/functions/servicos/:splat"
   status = 200
 
 [[redirects]]
@@ -31,8 +38,8 @@
   status = 200
 
 [[redirects]]
-  from = "/api/usuarios/:id"
-  to = "/.netlify/functions/usuarios?id=:id"
+  from = "/api/usuarios/*"
+  to = "/.netlify/functions/usuarios/:splat"
   status = 200
 
 [[redirects]]
@@ -41,8 +48,8 @@
   status = 200
 
 [[redirects]]
-  from = "/api/agendamentos/:id"
-  to = "/.netlify/functions/agendamentos?id=:id"
+  from = "/api/agendamentos/*"
+  to = "/.netlify/functions/agendamentos/:splat"
   status = 200
 
 [[redirects]]
@@ -51,8 +58,8 @@
   status = 200
 
 [[redirects]]
-  from = "/api/preferencias-corte/:usuarioId"
-  to = "/.netlify/functions/preferencias-corte?usuarioId=:usuarioId"
+  from = "/api/preferencias-corte/*"
+  to = "/.netlify/functions/preferencias-corte/:splat"
   status = 200
 
 [[redirects]]
@@ -61,8 +68,8 @@
   status = 200
 
 [[redirects]]
-  from = "/api/notificacoes/:usuarioId"
-  to = "/.netlify/functions/notificacoes?usuarioId=:usuarioId"
+  from = "/api/notificacoes/*"
+  to = "/.netlify/functions/notificacoes/:splat"
   status = 200
 
 [[redirects]]

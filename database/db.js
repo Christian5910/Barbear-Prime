@@ -297,7 +297,7 @@
   async function carregarSessao() {
     const resultado = await requisitar('/auth/sessao');
     cache.sessao = resultado.usuario
-      ? { usuarioId: resultado.usuario.id, nome: resultado.usuario.nome, email: resultado.usuario.email, papel: resultado.usuario.papel, avatar: resultado.usuario.avatar_url }
+      ? { usuarioId: resultado.usuario.id, nome: resultado.usuario.nome, email: resultado.usuario.email, papel: resultado.usuario.papel, avatar: resultado.usuario.avatar_url, master: Boolean(resultado.usuario.master) }
       : null;
     return cache.sessao;
   }
@@ -331,7 +331,7 @@
         // qualquer cache de leitura de uma sessão anterior neste mesmo
         // navegador antes de gravar a sessão nova.
         bpOfflineLimparCacheLeitura();
-        cache.sessao = { usuarioId: resultado.usuario.id, nome: resultado.usuario.nome, email: resultado.usuario.email, papel: resultado.usuario.papel, avatar: resultado.usuario.avatar_url };
+        cache.sessao = { usuarioId: resultado.usuario.id, nome: resultado.usuario.nome, email: resultado.usuario.email, papel: resultado.usuario.papel, avatar: resultado.usuario.avatar_url, master: Boolean(resultado.usuario.master) };
       }
       return resultado.usuario;
     } catch (e) {
@@ -382,7 +382,7 @@
       // de leitura de uma sessão anterior neste navegador antes de gravar
       // a sessão de quem acabou de entrar.
       bpOfflineLimparCacheLeitura();
-      cache.sessao = { usuarioId: resultado.usuario.id, nome: resultado.usuario.nome, email: resultado.usuario.email, papel: resultado.usuario.papel, avatar: resultado.usuario.avatar_url };
+      cache.sessao = { usuarioId: resultado.usuario.id, nome: resultado.usuario.nome, email: resultado.usuario.email, papel: resultado.usuario.papel, avatar: resultado.usuario.avatar_url, master: Boolean(resultado.usuario.master) };
       return resultado.usuario;
     } catch (e) {
       return false;
@@ -584,14 +584,54 @@
   }
 
   function blocosInfoPadrao(config) {
-    // Compatibilidade: se a lista de blocos nunca foi salva (loja recém
-    // atualizada), usa os valores antigos de horário/telefone como ponto
-    // de partida em vez de simplesmente ignorá-los.
-    return [
-      { id: 'horario', icone: null, iconeBootstrap: 'bi-clock', texto: config.endereco_horario || 'Ter a Sáb, 9h às 20h' },
-      { id: 'telefone', icone: null, iconeBootstrap: 'bi-telephone', texto: config.endereco_telefone || '(74) 99999-0000' },
-      { id: 'estacionamento', icone: null, iconeBootstrap: 'bi-car-front', texto: 'Estacionamento próprio' },
-    ];
+    // Compatibilidade: bancos antigos guardavam horário e telefone em
+    // chaves soltas (endereco_horario / endereco_telefone) antes da lista
+    // editável de blocos existir. Só usamos esses valores se realmente
+    // estiverem salvos no banco; nenhum texto de exemplo é inventado aqui,
+    // porque toda informação exibida deve vir do banco de dados.
+    const blocos = [];
+    if (config.endereco_horario) {
+      blocos.push({ id: 'horario', icone: null, iconeBootstrap: 'bi-clock', texto: config.endereco_horario });
+    }
+    if (config.endereco_telefone) {
+      blocos.push({ id: 'telefone', icone: null, iconeBootstrap: 'bi-telephone', texto: config.endereco_telefone });
+    }
+    return blocos;
+  }
+
+  const SIGLAS_UF = [
+    'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA',
+    'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+  ];
+
+  /**
+   * Extrai "Cidade, UF" de um texto de endereço, como o da linha 2
+   * ("Bairro dos Perus, Xique-Xique, BA") ou o termo de busca do mapa.
+   * Aceita "Cidade, UF", "Cidade - UF" e "Cidade/UF". Se não achar uma
+   * sigla de estado válida, usa o último trecho depois da vírgula como
+   * cidade. Devolve '' quando não dá para saber (ex.: só o nome do bairro).
+   */
+  function extrairCidadeUf(texto) {
+    const partes = String(texto || '').split(',').map(p => p.trim()).filter(Boolean);
+    if (!partes.length) return '';
+
+    const ultimo = partes[partes.length - 1];
+
+    // "Cidade - UF" ou "Cidade/UF" no último trecho
+    const composto = /^(.+?)\s*[-–\/]\s*([A-Za-z]{2})$/.exec(ultimo);
+    if (composto && SIGLAS_UF.includes(composto[2].toUpperCase())) {
+      return `${composto[1].trim()}, ${composto[2].toUpperCase()}`;
+    }
+
+    if (partes.length < 2) return '';
+
+    // "..., Cidade, UF"
+    if (SIGLAS_UF.includes(ultimo.toUpperCase()) && partes.length >= 2) {
+      return `${partes[partes.length - 2]}, ${ultimo.toUpperCase()}`;
+    }
+
+    // Sem sigla de estado: assume que o último trecho é a cidade.
+    return ultimo;
   }
 
   async function getEnderecoBarbearia() {
@@ -602,12 +642,18 @@
     } catch (e) {
       infoBlocos = null;
     }
+    const linha2 = config.endereco_linha2 || '';
+    const mapaBusca = config.endereco_mapa_busca || '';
     return {
-      linha1: config.endereco_linha1 || 'Rua dos Berimbau Duros, Nº666',
-      linha2: config.endereco_linha2 || 'Bairro dos Perus, Xique-Xique, BA',
+      linha1: config.endereco_linha1 || '',
+      linha2,
       cep: config.endereco_cep || '',
       numero: config.endereco_numero || '',
-      mapaBusca: config.endereco_mapa_busca || 'Xique-Xique,BA',
+      mapaBusca,
+      // "Cidade, UF" derivado do endereço cadastrado (linha 2 primeiro,
+      // depois o termo do mapa). É o que aparece em "Barbearia · Cidade, UF"
+      // na Home e no Painel, então sempre acompanha o que o master salvar.
+      localidade: extrairCidadeUf(linha2) || extrairCidadeUf(mapaBusca),
       infoBlocos: Array.isArray(infoBlocos) ? infoBlocos : blocosInfoPadrao(config),
     };
   }
@@ -890,7 +936,7 @@
       const resultado = await requisitar(`/notificacoes/${usuarioId}`);
       return resultado.preferencias;
     } catch (e) {
-      return { notifAgendamentos: true, notifOfertas: false, somNotificacao: 'padrao', somPersonalizado: null };
+      return { notifAgendamentos: true, notifOfertas: false, notifEmailAgendamentos: false, somNotificacao: 'padrao', somPersonalizado: null };
     }
   }
 
@@ -931,6 +977,32 @@
       await requisitar(`/notificacoes/${sessao.usuarioId}`, {
         method: 'PUT',
         body: JSON.stringify({ ...atuais, notifAgendamentos: ativado }),
+      });
+      return ativado;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Só tem efeito pra conta de equipe: o próprio barbeiro recebendo um
+  // e-mail (via Resend) sempre que um cliente marca um horário com ele —
+  // ver netlify/functions/agendamentos.js. Desligado por padrão, cada
+  // barbeiro ativa pela própria tela de Preferências.
+  async function getPreferenciaEmailAgendamentos() {
+    const sessao = await getSessao();
+    if (!sessao) return false;
+    const prefs = await getPreferenciasNotificacaoCompletas(sessao.usuarioId);
+    return Boolean(prefs.notifEmailAgendamentos);
+  }
+
+  async function salvarPreferenciaEmailAgendamentos(ativado) {
+    const sessao = await getSessao();
+    if (!sessao) return false;
+    const atuais = await getPreferenciasNotificacaoCompletas(sessao.usuarioId);
+    try {
+      await requisitar(`/notificacoes/${sessao.usuarioId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ ...atuais, notifEmailAgendamentos: ativado }),
       });
       return ativado;
     } catch (e) {
@@ -1060,6 +1132,8 @@
     salvarPreferenciaNotificacoes,
     getPreferenciaOfertas,
     salvarPreferenciaOfertas,
+    getPreferenciaEmailAgendamentos,
+    salvarPreferenciaEmailAgendamentos,
     getSomNotificacao,
     salvarSomNotificacao,
     getSomPersonalizado,

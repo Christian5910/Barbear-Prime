@@ -153,7 +153,26 @@ async function enviarEmailRecuperacaoSenha(event, para, nome, tokenBruto) {
   return enviarEmail({ para, assunto: 'Redefinição de senha — Barbear Prime', html, texto });
 }
 
+/**
+ * Avisa o barbeiro por e-mail quando um cliente cria um agendamento
+ * atribuído a ele — só chamada quando a própria conta ativou essa opção
+ * em Preferências (notif_email_agendamentos), ver agendamentos.js.
+ */
+async function enviarEmailNovoAgendamento(event, para, nomeBarbeiro, detalhes) {
+  const { clienteNome, dataFormatada, hora, servicos } = detalhes;
+  const link = `${urlSite(event)}/sites/agendamentos.html`;
+  const html = envelope({
+    titulo: `Novo agendamento`,
+    corpoHtml: `<p>Olá, ${nomeBarbeiro}. ${clienteNome} marcou um horário com você para ${dataFormatada} às ${hora} (${servicos}). Está aguardando sua confirmação.</p>`,
+    textoBotao: 'Ver agenda',
+    linkBotao: link,
+  });
+  const texto = `Olá, ${nomeBarbeiro}. ${clienteNome} marcou um horário com você para ${dataFormatada} às ${hora} (${servicos}). Está aguardando sua confirmação. Veja em: ${link}`;
+  return enviarEmail({ para, assunto: 'Novo agendamento — Barbear Prime', html, texto });
+}
+
 module.exports = {
   enviarEmailVerificacao,
   enviarEmailRecuperacaoSenha,
+  enviarEmailNovoAgendamento,
 };

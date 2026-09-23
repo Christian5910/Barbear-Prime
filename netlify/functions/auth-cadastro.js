@@ -2,9 +2,10 @@
  * POST /api/auth/cadastro
  * Body: { nome, email, senha, papel? }
  *
- * papel só é aceito como 'equipe' se quem está chamando já tiver uma
- * sessão de equipe ativa (mesma regra do front-end: só a equipe pode criar
- * conta de barbeiro). Sem sessão de equipe, todo cadastro vira 'cliente'.
+ * papel só é aceito como 'equipe' se quem está chamando for o barbeiro
+ * MASTER (não qualquer conta de equipe — ver hierarquia em
+ * database/final/schema-postgresql.sql). Sem sessão de equipe master,
+ * todo cadastro vira 'cliente'.
  *
  * A conta fica utilizável IMEDIATAMENTE — login automático já na resposta
  * deste endpoint (exceto quando é a equipe criando a conta de um colega,
@@ -71,12 +72,14 @@ exports.handler = async (event) => {
     return erro(409, 'Este e-mail já está cadastrado.');
   }
 
-  // Só permite criar conta de equipe (barbeiro) se quem está chamando já
-  // for equipe — mesma regra usada em sites/perfil.html.
+  // Só o barbeiro MASTER pode convidar um novo colega de equipe — um
+  // barbeiro comum não pode, mesmo estando logado como equipe (mesma
+  // regra usada em sites/perfil.html: o botão "Criar conta de barbeiro"
+  // só aparece pra quem é master).
   let papel = 'cliente';
   if (dados.papel === 'equipe') {
     const solicitante = await getUsuarioDaSessao(event);
-    if (solicitante?.papel === 'equipe') papel = 'equipe';
+    if (solicitante?.papel === 'equipe' && solicitante?.master) papel = 'equipe';
   }
 
   const senhaHash = await bcrypt.hash(senha, CUSTO_BCRYPT);

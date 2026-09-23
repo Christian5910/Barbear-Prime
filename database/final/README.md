@@ -20,6 +20,7 @@ database/final/
 ├── seed-mysql.sql               dados de exemplo (os mesmos 3 usuários/agendamentos do protótipo)
 ├── schema-postgresql.sql        mesma estrutura, para PostgreSQL 14+ (Supabase/Neon/Railway)
 ├── seed-postgresql.sql          dados de exemplo, versão PostgreSQL
+├── reset-postgresql.sql         apaga todos os dados e volta ao estado inicial (ver DEPLOY.md)
 ├── schema-midia-mysql.sql       tabela opcional para guardar imagens dentro do banco
 ├── importar-imagens.js          script Node que gera o SQL de importação das imagens
 └── images/                      cópia das imagens reais do site (logo, avatar, banner, ícones)

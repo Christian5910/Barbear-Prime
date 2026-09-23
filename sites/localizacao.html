@@ -44,17 +44,16 @@
 
   <div class="tela-conteudo">
     <div class="scroll-y flex-grow-1 container-site pt-3" style="max-width:900px;">
-    <div class="mb-3" style="height: 380px; width: 100%; border-radius: 12px; overflow: hidden;">
+    <div class="mb-3 skeleton" id="mapaLocalizacaoWrap" style="height: 380px; width: 100%; border-radius: 12px; overflow: hidden;">
       <iframe
         id="mapaLocalizacaoIframe"
-        src="https://www.google.com/maps?q=Xique-Xique,BA&output=embed"
         style="width: 100%; height: 100%; border: 0;"
         loading="lazy"
         referrerpolicy="no-referrer-when-downgrade"
         title="Mapa da localização da Barbear Prime"></iframe>
     </div>
-      <p class="text-center fw-semibold mb-1" id="enderecoLinha1">Rua dos Berimbau Duros, Nº666</p>
-      <p class="text-center texto-suave small mb-0" id="enderecoLinha2">Bairro dos Perus, Xique-Xique, BA</p>
+      <p class="text-center fw-semibold mb-1 skeleton skeleton-linha mx-auto" id="enderecoLinha1">&nbsp;</p>
+      <p class="text-center texto-suave small mb-0 skeleton skeleton-linha mx-auto" id="enderecoLinha2">&nbsp;</p>
 
       <!-- Preenchido dinamicamente a partir da lista de informações
            configurada pela equipe (ver formEditarLocalizacao mais abaixo) -->
@@ -76,7 +75,7 @@
           </div>
           <div class="col-5">
             <label for="localNumero" class="form-label small fw-semibold">Número</label>
-            <input type="text" class="input-prime" id="localNumero" placeholder="666">
+            <input type="text" class="input-prime" id="localNumero" placeholder="Ex.: 123">
           </div>
         </div>
         <button type="button" class="btn-outline-prime w-100 mb-3" id="btnBuscarCep">
@@ -93,7 +92,7 @@
         </div>
         <div class="mb-3">
           <label for="localMapaBusca" class="form-label small fw-semibold">Endereço usado no mapa</label>
-          <input type="text" class="input-prime" id="localMapaBusca" placeholder="Ex.: Xique-Xique,BA" required>
+          <input type="text" class="input-prime" id="localMapaBusca" placeholder="Ex.: Cidade,UF" required>
           <p class="small texto-suave mt-1 mb-0">Preenchido automaticamente ao buscar o CEP, mas pode ajustar manualmente.</p>
         </div>
 

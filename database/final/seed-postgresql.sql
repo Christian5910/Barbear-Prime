@@ -9,15 +9,15 @@
 --   ana@email.com           -> senha123
 -- ============================================================================
 
-INSERT INTO usuarios (id, nome, email, senha_hash, papel, avatar_url, ativo, email_verificado) VALUES
+INSERT INTO usuarios (id, nome, email, senha_hash, papel, avatar_url, ativo, email_verificado, master) VALUES
   (1001, 'Joao Osvaldo', 'joao@yahoo.com',
-   '$2y$10$examplehashreplaceonrealsetup0000000000000000000000000000', 'cliente', '/assets/img/avatar-exemplo.jpg', TRUE, TRUE),
+   '$2y$10$examplehashreplaceonrealsetup0000000000000000000000000000', 'cliente', '/assets/img/avatar-exemplo.jpg', TRUE, TRUE, FALSE),
   (1002, 'Barbeiro Admin', 'equipe@barbearprime.com',
-   '$2y$10$examplehashreplaceonrealsetup0000000000000000000000000000', 'equipe', '/assets/img/avatar-exemplo.jpg', TRUE, TRUE),
+   '$2y$10$examplehashreplaceonrealsetup0000000000000000000000000000', 'equipe', '/assets/img/avatar-exemplo.jpg', TRUE, TRUE, TRUE),
   (1003, 'Ana Silva', 'ana@email.com',
-   '$2y$10$examplehashreplaceonrealsetup0000000000000000000000000000', 'cliente', '/assets/img/avatar-exemplo.jpg', TRUE, TRUE)
+   '$2y$10$examplehashreplaceonrealsetup0000000000000000000000000000', 'cliente', '/assets/img/avatar-exemplo.jpg', TRUE, TRUE, FALSE)
 ON CONFLICT (id) DO UPDATE SET
-  nome = EXCLUDED.nome, papel = EXCLUDED.papel, avatar_url = EXCLUDED.avatar_url, email_verificado = EXCLUDED.email_verificado;
+  nome = EXCLUDED.nome, papel = EXCLUDED.papel, avatar_url = EXCLUDED.avatar_url, email_verificado = EXCLUDED.email_verificado, master = EXCLUDED.master;
 
 -- Corrige a sequência do BIGSERIAL para não colidir com os IDs fixos acima.
 SELECT setval(pg_get_serial_sequence('usuarios', 'id'), (SELECT MAX(id) FROM usuarios));
@@ -25,8 +25,8 @@ SELECT setval(pg_get_serial_sequence('usuarios', 'id'), (SELECT MAX(id) FROM usu
 INSERT INTO servicos (id, nome, descricao, preco_centavos, duracao_min, destaque) VALUES
   (1, 'Barba', 'Modelagem e alinhamento da barba com navalha/máquina, hidratação e finalização do contorno.', 2000, 30, TRUE),
   (2, 'Corte e Barba', 'Combo completo: corte de cabelo + barba, com acabamento e finalização.', 4500, 60, TRUE),
-  (3, 'Corte Padrao', 'Corte de cabelo clássico, com máquina e tesoura, lavagem e finalização.', 3000, 40, TRUE),
-  (4, 'Degrade', 'Corte degradê (fade), com transição suave entre os comprimentos.', 3500, 45, TRUE),
+  (3, 'Corte Padrão', 'Corte de cabelo clássico, com máquina e tesoura, lavagem e finalização.', 3000, 40, TRUE),
+  (4, 'Degradê', 'Corte degradê (fade), com transição suave entre os comprimentos.', 3500, 45, TRUE),
   (5, 'Pigmento', 'Aplicação de pigmento para disfarçar falhas ou uniformizar a cor.', 3000, 35, FALSE),
   (6, 'Sobrancelha', 'Design e alinhamento de sobrancelha.', 2000, 20, FALSE),
   (7, 'Reflexo', 'Aplicação de reflexo/mechas no cabelo.', 5500, 70, FALSE),
@@ -39,9 +39,9 @@ ON CONFLICT (id) DO UPDATE SET
 SELECT setval(pg_get_serial_sequence('servicos', 'id'), (SELECT MAX(id) FROM servicos));
 
 INSERT INTO agendamentos (id, usuario_id, cliente_nome, barbeiro_id, data_servico, hora_inicio, status, criado_pela_equipe) VALUES
-  (2001, 1001, 'Joao Osvaldo', 1002, '2026-09-15', '14:00:00', 'confirmado', FALSE),
-  (2002, 1001, 'Joao Osvaldo', 1002, '2026-09-20', '10:00:00', 'pendente',   FALSE),
-  (2003, 1003, 'Ana Silva',    1002, '2026-09-18', '16:00:00', 'pendente',   FALSE)
+  (2001, 1001, 'Joao Osvaldo', 1002, CURRENT_DATE + 1, '14:00:00', 'confirmado', FALSE),
+  (2002, 1001, 'Joao Osvaldo', 1002, CURRENT_DATE + 3, '10:00:00', 'pendente',   FALSE),
+  (2003, 1003, 'Ana Silva',    1002, CURRENT_DATE + 2, '16:00:00', 'pendente',   FALSE)
 ON CONFLICT (id) DO UPDATE SET
   data_servico = EXCLUDED.data_servico, hora_inicio = EXCLUDED.hora_inicio, status = EXCLUDED.status;
 
@@ -51,14 +51,15 @@ INSERT INTO agendamento_horarios (agendamento_id, hora) VALUES
   (2001, '14:00:00'), (2002, '10:00:00'), (2003, '16:00:00')
 ON CONFLICT (agendamento_id, hora) DO NOTHING;
 
+-- agendamento_servicos tem PK própria (id), então não há ON CONFLICT aqui:
+-- apagamos as linhas de exemplo antes para o seed poder rodar mais de uma vez.
+DELETE FROM agendamento_servicos WHERE agendamento_id IN (2001, 2002, 2003);
 INSERT INTO agendamento_servicos (agendamento_id, servico_id, nome_snapshot, preco_centavos_snapshot) VALUES
   (2001, 1, 'Barba', 2000),
-  (2001, 3, 'Corte Padrao', 3000),
+  (2001, 3, 'Corte Padrão', 3000),
   (2002, 2, 'Corte e Barba', 4500),
-  (2003, 4, 'Degrade', 3500),
-  (2003, 5, 'Pigmento', 3000)
-ON CONFLICT (agendamento_id, nome_snapshot) DO UPDATE SET
-  preco_centavos_snapshot = EXCLUDED.preco_centavos_snapshot;
+  (2003, 4, 'Degradê', 3500),
+  (2003, 5, 'Pigmento', 3000);
 
 INSERT INTO preferencias_corte (usuario_id, tamanho_cabelo, tipo_degrade, acabamento, estilo_barba, notas) VALUES
   (1001, 'medio', 'navalhado', 'arredondado', 'longa_cheia', 'Prefiro a nuca bem alinhada e o contorno da barba mais fechado.'),
@@ -76,5 +77,11 @@ ON CONFLICT (usuario_id) DO UPDATE SET
   som_notificacao = EXCLUDED.som_notificacao;
 
 INSERT INTO config_app (chave, valor) VALUES
-  ('banner_barbearia_url', '/assets/img/capa-barbearia.jpg')
+  ('banner_barbearia_url', '/assets/img/capa-barbearia.jpg'),
+  ('endereco_linha1', 'Rua dos Berimbau Duros, Nº666'),
+  ('endereco_linha2', 'Bairro dos Perus, Xique-Xique, BA'),
+  ('endereco_cep', ''),
+  ('endereco_numero', ''),
+  ('endereco_mapa_busca', 'Xique-Xique,BA'),
+  ('localizacao_info_blocos', '[{"id":"horario","icone":null,"iconeBootstrap":"bi-clock","texto":"Ter a Sáb, 9h às 20h"},{"id":"telefone","icone":null,"iconeBootstrap":"bi-telephone","texto":"(74) 99999-0000"},{"id":"estacionamento","icone":null,"iconeBootstrap":"bi-car-front","texto":"Estacionamento próprio"}]')
 ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor;

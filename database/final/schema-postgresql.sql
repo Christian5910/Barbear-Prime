@@ -30,9 +30,22 @@ CREATE TABLE usuarios (
   -- mesmo jeito que "esqueci minha senha" é um recurso disponível sem
   -- ser obrigatório (ver netlify/functions/auth-login.js).
   email_verificado  BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Só tem efeito quando papel = 'equipe'. O barbeiro "master" é o único
+  -- que pode: convidar novos barbeiros, editar endereço/informações da
+  -- Localização, editar o banner do painel, e gerenciar o catálogo de
+  -- serviços. Um barbeiro comum (master = FALSE) só mexe na própria
+  -- agenda (ver netlify/functions/servicos.js, config.js, upload.js,
+  -- auth-cadastro.js). A conta master nunca pode ser excluída (ver
+  -- usuarios.js) — existe sempre pelo menos uma, pra nunca ninguém ficar
+  -- travado sem conseguir gerenciar a barbearia.
+  master            BOOLEAN NOT NULL DEFAULT FALSE,
   criado_em         TIMESTAMPTZ NOT NULL DEFAULT now(),
   atualizado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- No máximo uma conta master por vez — reforçado aqui no banco, não só
+-- na lógica das functions, pra nunca dar pra criar uma segunda master
+-- nem por engano nem por um bug futuro em algum endpoint.
+CREATE UNIQUE INDEX idx_usuarios_master_unico ON usuarios (master) WHERE master = TRUE;
 CREATE INDEX idx_usuarios_papel ON usuarios (papel);
 
 -- ----------------------------------------------------------------------------
@@ -169,6 +182,11 @@ CREATE TABLE preferencias_notificacao (
   usuario_id             BIGINT PRIMARY KEY REFERENCES usuarios (id) ON DELETE CASCADE,
   notif_agendamentos     BOOLEAN NOT NULL DEFAULT TRUE,
   notif_ofertas          BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Só tem efeito para contas de equipe: manda um e-mail (via Resend, ver
+  -- _lib/email.js) para o próprio barbeiro sempre que um cliente cria um
+  -- agendamento atribuído a ele. Desligado por padrão — é opt-in, ver
+  -- sites/preferencias-app.html.
+  notif_email_agendamentos BOOLEAN NOT NULL DEFAULT FALSE,
   som_notificacao        som_notificacao_tipo NOT NULL DEFAULT 'padrao',
   som_personalizado_url  TEXT NULL,
   som_personalizado_nome VARCHAR(190) NULL,

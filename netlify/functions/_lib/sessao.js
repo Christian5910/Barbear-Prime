@@ -72,7 +72,7 @@ async function getUsuarioDaSessao(event) {
   const sql = getSql();
   const tokenHash = hashToken(tokenBruto);
   const linhas = await sql`
-    SELECT u.id, u.nome, u.email, u.papel, u.avatar_url, u.ativo
+    SELECT u.id, u.nome, u.email, u.papel, u.avatar_url, u.ativo, u.master
     FROM sessoes s
     JOIN usuarios u ON u.id = s.usuario_id
     WHERE s.token_hash = ${tokenHash} AND s.expira_em > now() AND u.ativo = TRUE

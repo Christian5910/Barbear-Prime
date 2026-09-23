@@ -9,7 +9,7 @@
  *            agendamentos que já usaram esse serviço (requer sessão de equipe)
  */
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJson, idDaRequisicao } = require('./_lib/http');
 const { getUsuarioDaSessao } = require('./_lib/sessao');
 
 function paraCentavos(valorEmReais) {
@@ -29,7 +29,7 @@ function paraApi(linha) {
 
 exports.handler = async (event) => {
   const sql = getSql();
-  const id = event.queryStringParameters?.id;
+  const id = idDaRequisicao(event);
 
   if (event.httpMethod === 'GET') {
     const linhas = await sql`
@@ -38,11 +38,12 @@ exports.handler = async (event) => {
     return json(200, { servicos: linhas.map(paraApi) });
   }
 
-  // Todas as escritas exigem sessão de equipe — mesma regra do front-end,
-  // onde o CRUD de serviços só existe no Painel do Barbeiro.
+  // Todas as escritas exigem o barbeiro MASTER — um barbeiro comum só
+  // mexe na própria agenda (ver bloqueios-agenda.js e agendamentos.js),
+  // não no catálogo de serviços da barbearia inteira.
   const usuario = await getUsuarioDaSessao(event);
-  if (!usuario || usuario.papel !== 'equipe') {
-    return erro(403, 'Apenas a equipe pode gerenciar serviços.');
+  if (!usuario || usuario.papel !== 'equipe' || !usuario.master) {
+    return erro(403, 'Apenas o barbeiro master pode gerenciar serviços.');
   }
 
   if (event.httpMethod === 'POST') {

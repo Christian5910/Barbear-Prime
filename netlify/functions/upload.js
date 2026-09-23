@@ -122,9 +122,11 @@ exports.handler = async (event) => {
   }
 
   // banner e ícone (dos blocos de informação da Localização) só podem
-  // ser trocados pela equipe (mesma regra do front-end)
-  if ((tipo === 'banner' || tipo === 'icone') && usuario.papel !== 'equipe') {
-    return erro(403, 'Apenas a equipe pode alterar essa imagem.');
+  // ser trocados pelo barbeiro MASTER (mesma regra de servicos.js e
+  // config.js — endereço/serviços/banner são configuração da barbearia
+  // inteira, não de cada barbeiro).
+  if ((tipo === 'banner' || tipo === 'icone') && (usuario.papel !== 'equipe' || !usuario.master)) {
+    return erro(403, 'Apenas o barbeiro master pode alterar essa imagem.');
   }
 
   const buffer = Buffer.from(conteudoBase64, 'base64');

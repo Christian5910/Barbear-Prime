@@ -8,7 +8,7 @@
  */
 const bcrypt = require('bcryptjs');
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJson, idDaRequisicao } = require('./_lib/http');
 const { getUsuarioDaSessao, encerrarSessao } = require('./_lib/sessao');
 
 const CUSTO_BCRYPT = 12;
@@ -44,7 +44,7 @@ function validarUrlImagem(valor) {
 }
 
 exports.handler = async (event) => {
-  const id = event.queryStringParameters?.id;
+  const id = idDaRequisicao(event);
   if (!id) return erro(400, 'Informe o id do usuário na URL.');
 
   const usuarioLogado = await getUsuarioDaSessao(event);
@@ -102,6 +102,13 @@ exports.handler = async (event) => {
   }
 
   if (event.httpMethod === 'DELETE') {
+    // A conta master nunca pode ser excluída, sem exceção — nem por ela
+    // mesma. Precisa sempre existir alguém que consiga convidar barbeiro
+    // novo, editar endereço/serviços e trocar o banner do painel; sem essa
+    // trava, a barbearia inteira ficaria sem ninguém com esse acesso.
+    if (usuarioLogado.master) {
+      return erro(409, 'A conta master não pode ser excluída.');
+    }
     if (usuarioLogado.papel === 'equipe') {
       const [{ total }] = await sql`
         SELECT COUNT(*)::int AS total FROM usuarios WHERE papel = 'equipe' AND ativo = TRUE
