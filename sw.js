@@ -24,7 +24,7 @@
  * dos usuários a buscar a lista atualizada na próxima visita.
  */
 
-const CACHE_VERSAO = 'barbear-prime-v3';
+const CACHE_VERSAO = 'barbear-prime-v4';
 
 const ARQUIVOS_PRINCIPAIS = [
   './index.html',

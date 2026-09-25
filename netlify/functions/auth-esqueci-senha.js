@@ -13,7 +13,7 @@
  * marca a conta como verificada também).
  */
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJson, comProtecao } = require('./_lib/http');
 const { gerarTokenBruto, hashToken } = require('./_lib/tokens');
 const { enviarEmailRecuperacaoSenha } = require('./_lib/email');
 
@@ -58,7 +58,7 @@ async function processarPedido(sql, email, event) {
   }
 }
 
-exports.handler = async (event) => {
+exports.handler = comProtecao(async (event) => {
   if (event.httpMethod !== 'POST') return metodoNaoPermitido(['POST']);
 
   const dados = corpoJson(event);
@@ -90,4 +90,4 @@ exports.handler = async (event) => {
   }
 
   return json(200, { ok: true, mensagem: MENSAGEM_GENERICA });
-};
+});

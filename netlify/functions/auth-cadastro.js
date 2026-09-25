@@ -2,10 +2,17 @@
  * POST /api/auth/cadastro
  * Body: { nome, email, senha, papel? }
  *
- * papel só é aceito como 'equipe' se quem está chamando for o barbeiro
- * MASTER (não qualquer conta de equipe — ver hierarquia em
- * database/final/schema-postgresql.sql). Sem sessão de equipe master,
- * todo cadastro vira 'cliente'.
+ * Hierarquia da equipe (ver database/final/schema-postgresql.sql):
+ *   - cadastro comum (sem papel): vira 'cliente', com login automático;
+ *   - papel:'equipe' exige uma sessão de equipe e vale assim:
+ *       barbeiro MASTER  -> cria barbeiro comum, ou outro MASTER se enviar
+ *                           master:true E confirmarRiscoMaster:true (a tela
+ *                           mostra um aviso obrigatório antes);
+ *       barbeiro comum COM permissão (pode_criar_barbeiros, dada por um
+ *                           master) -> cria SOMENTE barbeiro comum;
+ *       barbeiro comum SEM permissão / cliente / sem sessão -> 403.
+ *     (Antes, quem não podia criar barbeiro recebia uma conta de cliente
+ *     no lugar, e o login automático trocava a sessão de quem chamou.)
  *
  * A conta fica utilizável IMEDIATAMENTE — login automático já na resposta
  * deste endpoint (exceto quando é a equipe criando a conta de um colega,
@@ -26,7 +33,8 @@
  */
 const bcrypt = require('bcryptjs');
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJsonLimitado: corpoJson, ipDoCliente, comProtecao } = require('./_lib/http');
+const { excedeuLimite, registrarUso } = require('./_lib/limite');
 const { getUsuarioDaSessao, criarSessao } = require('./_lib/sessao');
 const { gerarTokenBruto, hashToken } = require('./_lib/tokens');
 const { enviarEmailVerificacao } = require('./_lib/email');
@@ -34,7 +42,7 @@ const { enviarEmailVerificacao } = require('./_lib/email');
 const CUSTO_BCRYPT = 12;
 const VALIDADE_TOKEN_HORAS = 24;
 
-exports.handler = async (event) => {
+exports.handler = comProtecao(async (event) => {
   if (event.httpMethod !== 'POST') return metodoNaoPermitido(['POST']);
 
   const dados = corpoJson(event);
@@ -43,6 +51,9 @@ exports.handler = async (event) => {
   const nome = String(dados.nome || '').trim();
   const email = String(dados.email || '').trim().toLowerCase();
   const senha = String(dados.senha || '');
+  if (typeof dados.nome === 'object' || typeof dados.email === 'object' || typeof dados.senha === 'object') {
+    return erro(400, 'Dados inválidos.');
+  }
 
   if (!nome || !email || !senha) {
     return erro(400, 'Preencha nome, e-mail e senha.');
@@ -61,6 +72,11 @@ exports.handler = async (event) => {
   if (senha.length < 6) {
     return erro(400, 'A senha deve ter pelo menos 6 caracteres.');
   }
+  // bcrypt só considera os primeiros 72 bytes; sem teto, uma senha de
+  // vários MB gastava CPU (hash + regex) só para ser recusada/aceita.
+  if (senha.length > 128) {
+    return erro(400, 'A senha deve ter no máximo 128 caracteres.');
+  }
 
   const sql = getSql();
 
@@ -72,23 +88,47 @@ exports.handler = async (event) => {
     return erro(409, 'Este e-mail já está cadastrado.');
   }
 
-  // Só o barbeiro MASTER pode convidar um novo colega de equipe — um
-  // barbeiro comum não pode, mesmo estando logado como equipe (mesma
-  // regra usada em sites/perfil.html: o botão "Criar conta de barbeiro"
-  // só aparece pra quem é master).
   let papel = 'cliente';
+  let criarMaster = false;
+  let criadoPor = null;
+
   if (dados.papel === 'equipe') {
     const solicitante = await getUsuarioDaSessao(event);
-    if (solicitante?.papel === 'equipe' && solicitante?.master) papel = 'equipe';
+    if (!solicitante || solicitante.papel !== 'equipe') {
+      return erro(403, 'Apenas barbeiros podem criar contas de barbeiro.');
+    }
+    const querMaster = dados.master === true;
+
+    if (solicitante.master) {
+      if (querMaster && dados.confirmarRiscoMaster !== true) {
+        // A tela mostra o aviso obrigatório antes; aqui o servidor também
+        // exige, para ninguém criar um master chamando a API às cegas.
+        return erro(400, 'Para criar um barbeiro master é preciso confirmar que você entendeu os riscos.');
+      }
+      criarMaster = querMaster;
+    } else if (solicitante.pode_criar_barbeiros) {
+      if (querMaster) return erro(403, 'Somente um barbeiro master pode criar outro master.');
+    } else {
+      return erro(403, 'Você ainda não tem permissão para criar barbeiros. Peça a um barbeiro master.');
+    }
+    papel = 'equipe';
+    criadoPor = solicitante.id;
+  } else {
+    // Cadastro aberto (cliente): limita criação em massa por IP.
+    const ip = ipDoCliente(event);
+    if (await excedeuLimite(sql, `cadastro:${ip}`, 5, 60)) {
+      return erro(429, 'Muitos cadastros deste dispositivo em pouco tempo. Tente novamente mais tarde.');
+    }
   }
 
   const senhaHash = await bcrypt.hash(senha, CUSTO_BCRYPT);
 
   const [usuario] = await sql`
-    INSERT INTO usuarios (nome, email, senha_hash, papel, avatar_url)
-    VALUES (${nome}, ${email}, ${senhaHash}, ${papel}, '/assets/img/avatar-exemplo.jpg')
-    RETURNING id, nome, email, papel, avatar_url
+    INSERT INTO usuarios (nome, email, senha_hash, papel, avatar_url, master, criado_por)
+    VALUES (${nome}, ${email}, ${senhaHash}, ${papel}, '/assets/img/avatar-exemplo.jpg', ${criarMaster}, ${criadoPor})
+    RETURNING id, nome, email, papel, avatar_url, master
   `;
+  if (papel !== 'equipe') await registrarUso(sql, `cadastro:${ipDoCliente(event)}`);
 
   // Best-effort: nunca deixa uma falha aqui derrubar o cadastro (que já
   // está gravado e utilizável no banco nesse ponto). Erros de envio (ou o
@@ -121,7 +161,7 @@ exports.handler = async (event) => {
 
   return json(
     201,
-    { usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, avatar_url: usuario.avatar_url } },
+    { usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, avatar_url: usuario.avatar_url, master: usuario.master } },
     setCookie ? { 'Set-Cookie': setCookie } : {}
   );
-};
+});

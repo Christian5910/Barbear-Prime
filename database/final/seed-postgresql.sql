@@ -9,15 +9,15 @@
 --   ana@email.com           -> senha123
 -- ============================================================================
 
-INSERT INTO usuarios (id, nome, email, senha_hash, papel, avatar_url, ativo, email_verificado, master) VALUES
+INSERT INTO usuarios (id, nome, email, senha_hash, papel, avatar_url, ativo, email_verificado, master, master_raiz) VALUES
   (1001, 'Joao Osvaldo', 'joao@yahoo.com',
-   '$2y$10$examplehashreplaceonrealsetup0000000000000000000000000000', 'cliente', '/assets/img/avatar-exemplo.jpg', TRUE, TRUE, FALSE),
+   '$2y$10$examplehashreplaceonrealsetup0000000000000000000000000000', 'cliente', '/assets/img/avatar-exemplo.jpg', TRUE, TRUE, FALSE, FALSE),
   (1002, 'Barbeiro Admin', 'equipe@barbearprime.com',
-   '$2y$10$examplehashreplaceonrealsetup0000000000000000000000000000', 'equipe', '/assets/img/avatar-exemplo.jpg', TRUE, TRUE, TRUE),
+   '$2y$10$examplehashreplaceonrealsetup0000000000000000000000000000', 'equipe', '/assets/img/avatar-exemplo.jpg', TRUE, TRUE, TRUE, TRUE),
   (1003, 'Ana Silva', 'ana@email.com',
-   '$2y$10$examplehashreplaceonrealsetup0000000000000000000000000000', 'cliente', '/assets/img/avatar-exemplo.jpg', TRUE, TRUE, FALSE)
+   '$2y$10$examplehashreplaceonrealsetup0000000000000000000000000000', 'cliente', '/assets/img/avatar-exemplo.jpg', TRUE, TRUE, FALSE, FALSE)
 ON CONFLICT (id) DO UPDATE SET
-  nome = EXCLUDED.nome, papel = EXCLUDED.papel, avatar_url = EXCLUDED.avatar_url, email_verificado = EXCLUDED.email_verificado, master = EXCLUDED.master;
+  nome = EXCLUDED.nome, papel = EXCLUDED.papel, avatar_url = EXCLUDED.avatar_url, email_verificado = EXCLUDED.email_verificado, master = EXCLUDED.master, master_raiz = EXCLUDED.master_raiz;
 
 -- Corrige a sequência do BIGSERIAL para não colidir com os IDs fixos acima.
 SELECT setval(pg_get_serial_sequence('usuarios', 'id'), (SELECT MAX(id) FROM usuarios));
@@ -78,6 +78,8 @@ ON CONFLICT (usuario_id) DO UPDATE SET
 
 INSERT INTO config_app (chave, valor) VALUES
   ('banner_barbearia_url', '/assets/img/capa-barbearia.jpg'),
+  ('banner_barbearia_ajuste', 'padrao'),
+  ('home_faixa_valores', '[{"titulo":"Desde 2016","texto":"Barbearia de tradição na região"},{"titulo":"Equipe experiente","texto":"Cortes clássicos e modernos"},{"titulo":"Acabamento na navalha","texto":"Detalhe impecável em todo serviço"}]'),
   ('endereco_linha1', 'Rua dos Berimbau Duros, Nº666'),
   ('endereco_linha2', 'Bairro dos Perus, Xique-Xique, BA'),
   ('endereco_cep', ''),

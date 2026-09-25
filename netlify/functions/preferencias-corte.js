@@ -6,7 +6,7 @@
  * Só o próprio usuário (ou a equipe) pode ler/gravar suas preferências.
  */
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson, idDaRequisicao } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJson, idDaRequisicao, comProtecao } = require('./_lib/http');
 const { getUsuarioDaSessao } = require('./_lib/sessao');
 
 function paraApi(linha) {
@@ -20,7 +20,7 @@ function paraApi(linha) {
   };
 }
 
-exports.handler = async (event) => {
+exports.handler = comProtecao(async (event) => {
   const usuarioId = idDaRequisicao(event, 'usuarioId');
   if (!usuarioId) return erro(400, 'Informe o usuarioId.');
 
@@ -38,8 +38,16 @@ exports.handler = async (event) => {
   }
 
   if (event.httpMethod === 'PUT') {
+    // A equipe pode LER a preferência de um cliente (para atender melhor),
+    // mas só o dono altera a própria.
+    if (String(usuarioLogado.id) !== String(usuarioId)) {
+      return erro(403, 'Só o próprio cliente altera as preferências de corte.');
+    }
     const dados = corpoJson(event);
     if (!dados) return erro(400, 'JSON inválido.');
+    if (dados.notas && String(dados.notas).length > 500) {
+      return erro(400, 'Observações muito longas (máximo 500 caracteres).');
+    }
 
     // tamanho_cabelo/tipo_degrade/acabamento/estilo_barba são VARCHAR(40)
     // no banco (vêm de <select> no front-end, mas nada impede um valor
@@ -71,4 +79,4 @@ exports.handler = async (event) => {
   }
 
   return metodoNaoPermitido(['GET', 'PUT']);
-};
+});

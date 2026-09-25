@@ -81,3 +81,50 @@
   from = "/api/bloqueios-agenda"
   to = "/.netlify/functions/bloqueios-agenda"
   status = 200
+
+[[redirects]]
+  from = "/api/equipe"
+  to = "/.netlify/functions/equipe"
+  status = 200
+
+[[redirects]]
+  from = "/api/equipe/*"
+  to = "/.netlify/functions/equipe/:splat"
+  status = 200
+
+# ==============================================================================
+# CABEÇALHOS DE SEGURANÇA (valem para o site inteiro)
+# ==============================================================================
+# Content-Security-Policy: o navegador só executa/carrega o que estiver nesta
+# lista. Mesmo que algum dia entre um texto malicioso na página (XSS), ele
+# não consegue rodar script de fora, mandar dados para outro servidor nem
+# embutir o site em outro (clickjacking).
+#   script-src   só arquivos do próprio site, o Bootstrap (jsDelivr) e o único
+#                script inline das páginas (aplica tema/fonte antes de
+#                desenhar; identificado pelo hash sha256, não por
+#                'unsafe-inline'). Se você editar esse script, o hash muda e
+#                precisa ser recalculado (ver DEPLOY.md, seção de segurança).
+#   style-src    permite estilo inline porque as telas usam style="..." e o
+#                Bootstrap ajusta estilos por JavaScript.
+#   img-src      o próprio site, data:/blob: (prévia e recorte de imagem) e o
+#                ImageKit (fotos enviadas).
+#   connect-src  a API do próprio site e o ViaCEP (busca de endereço por CEP).
+#   frame-src    o mapa do Google na página de Localização.
+# Se um dia trocar de provedor de imagem ou adicionar outro serviço externo,
+# inclua o endereço dele na linha certa, senão o navegador vai bloquear.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'sha256-x3iAZkBi31h9Iz2DRpgEWLRTWxho7vbpoUmn5mwye3s='; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob: https://ik.imagekit.io; media-src 'self' blob: data: https://ik.imagekit.io; connect-src 'self' https://viacep.com.br; frame-src https://www.google.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    Cross-Origin-Opener-Policy = "same-origin"
+
+# Respostas da API nunca devem ficar guardadas em cache (têm dados de conta).
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "no-store"

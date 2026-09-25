@@ -87,4 +87,95 @@ function paraDataISO(valor) {
   return String(valor).slice(0, 10);
 }
 
-module.exports = { json, erro, metodoNaoPermitido, corpoJson, idDaRequisicao, paraDataISO };
+/**
+ * Tamanho máximo aceito para o corpo de uma requisição JSON comum (o upload
+ * tem limite próprio). Sem isso, alguém podia mandar vários MB de JSON para
+ * cada chamada só para gastar CPU/memória da function.
+ */
+const LIMITE_CORPO_BYTES = 64 * 1024;
+
+/**
+ * Como corpoJson(), mas recusa corpos grandes demais. Devolve null se o
+ * JSON for inválido OU grande demais (quem chama já trata null como 400).
+ */
+function corpoJsonLimitado(event, limite = LIMITE_CORPO_BYTES) {
+  if (event.body && Buffer.byteLength(event.body, 'utf8') > limite) return null;
+  return corpoJson(event);
+}
+
+/**
+ * IP de quem chamou. O Netlify preenche `x-nf-client-connection-ip` com o
+ * IP da conexão de verdade (o cliente não consegue forjar esse cabeçalho).
+ * `x-forwarded-for` só entra como reserva (ex.: `netlify dev` local), porque
+ * o primeiro item dele pode ser escrito pelo próprio cliente.
+ */
+function ipDoCliente(event) {
+  const h = event.headers || {};
+  return (
+    h['x-nf-client-connection-ip'] ||
+    (h['x-forwarded-for'] || '').split(',').pop().trim() ||
+    'desconhecido'
+  ).slice(0, 64);
+}
+
+/**
+ * Defesa em profundidade contra CSRF: o cookie de sessão já é SameSite=Lax
+ * (o navegador não o envia em POST/PUT/DELETE vindos de outro site), mas
+ * também recusamos qualquer requisição que MUDA dados cujo cabeçalho Origin
+ * aponte para outro site. Sem Origin (curl, apps) não há o que conferir.
+ */
+function origemPermitida(event) {
+  const metodo = (event.httpMethod || 'GET').toUpperCase();
+  if (metodo === 'GET' || metodo === 'HEAD' || metodo === 'OPTIONS') return true;
+  const h = event.headers || {};
+  const origem = h.origin || h.Origin;
+  if (!origem) return true;
+  let hostOrigem;
+  try {
+    hostOrigem = new URL(origem).host;
+  } catch (e) {
+    return false; // "null" ou lixo
+  }
+  const hostsAceitos = [h['x-forwarded-host'], h.host].filter(Boolean);
+  for (const url of [process.env.SITE_URL, process.env.URL]) {
+    try { if (url) hostsAceitos.push(new URL(url).host); } catch (e) { /* ignora */ }
+  }
+  return hostsAceitos.includes(hostOrigem);
+}
+
+/** Envolve um handler: recusa origem estranha e converte exceção em 500 limpo. */
+function comProtecao(handler) {
+  return async (event, contexto) => {
+    if (!origemPermitida(event)) return erro(403, 'Origem da requisição não permitida.');
+    try {
+      return await handler(event, contexto);
+    } catch (e) {
+      // Nunca devolve a mensagem crua do banco/driver ao cliente (pode
+      // expor nome de tabela, coluna ou trecho da consulta).
+      console.error('Erro não tratado na function:', e);
+      return erro(500, 'Erro interno. Tente novamente em instantes.');
+    }
+  };
+}
+
+/** Escapa texto para colocar dentro de HTML (e-mails). */
+function escaparHtml(valor) {
+  return String(valor ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+/** Valida "AAAA-MM-DD" (e que a data existe) e "HH:MM". */
+function ehDataISO(v) {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+function ehHoraHHMM(v) {
+  return typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+}
+
+module.exports = {
+  json, erro, metodoNaoPermitido, corpoJson, corpoJsonLimitado, idDaRequisicao, paraDataISO,
+  ipDoCliente, origemPermitida, comProtecao, escaparHtml, ehDataISO, ehHoraHHMM, LIMITE_CORPO_BYTES,
+};

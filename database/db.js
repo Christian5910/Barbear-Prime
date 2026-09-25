@@ -297,7 +297,7 @@
   async function carregarSessao() {
     const resultado = await requisitar('/auth/sessao');
     cache.sessao = resultado.usuario
-      ? { usuarioId: resultado.usuario.id, nome: resultado.usuario.nome, email: resultado.usuario.email, papel: resultado.usuario.papel, avatar: resultado.usuario.avatar_url, master: Boolean(resultado.usuario.master) }
+      ? { usuarioId: resultado.usuario.id, nome: resultado.usuario.nome, email: resultado.usuario.email, papel: resultado.usuario.papel, avatar: resultado.usuario.avatar_url, master: Boolean(resultado.usuario.master), masterRaiz: Boolean(resultado.usuario.master_raiz), podeCriarBarbeiros: Boolean(resultado.usuario.pode_criar_barbeiros) }
       : null;
     return cache.sessao;
   }
@@ -333,6 +333,27 @@
         bpOfflineLimparCacheLeitura();
         cache.sessao = { usuarioId: resultado.usuario.id, nome: resultado.usuario.nome, email: resultado.usuario.email, papel: resultado.usuario.papel, avatar: resultado.usuario.avatar_url, master: Boolean(resultado.usuario.master) };
       }
+      return resultado.usuario;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Cria a conta de OUTRO barbeiro (quem chama já precisa estar logado como
+   * equipe: master, ou barbeiro comum com permissão). `opcoes.master` pede
+   * uma conta master; nesse caso `confirmarRiscoMaster` precisa ser true
+   * (a tela só manda depois do aviso obrigatório). O servidor decide se a
+   * criação é permitida; esta função só repassa.
+   */
+  async function criarBarbeiro(nome, email, senha, opcoes = {}) {
+    try {
+      const corpo = { nome, email, senha, papel: 'equipe' };
+      if (opcoes.master) {
+        corpo.master = true;
+        corpo.confirmarRiscoMaster = opcoes.confirmarRiscoMaster === true;
+      }
+      const resultado = await requisitar('/auth/cadastro', { method: 'POST', body: JSON.stringify(corpo) });
       return resultado.usuario;
     } catch (e) {
       return false;
@@ -403,13 +424,20 @@
     return Boolean(await getSessao());
   }
 
-  async function atualizarPerfil(nome, email, senha, avatarBase64) {
+  async function atualizarPerfil(nome, email, senha, avatarBase64, senhaAtual) {
     const sessao = await getSessao();
     if (!sessao) return false;
     try {
       const payload = { nome, email };
       if (senha) payload.senha = senha;
-      if (avatarBase64) {
+      // Trocar senha ou e-mail exige a senha atual (o servidor confere).
+      if (senhaAtual) payload.senhaAtual = senhaAtual;
+      // Só sobe foto quando há uma imagem NOVA (data URL gerada pelo recorte).
+      // Antes, salvar só o nome reenviava a URL do avatar atual como se fosse
+      // o conteúdo da imagem, e o servidor respondia "o arquivo enviado não
+      // parece ser uma imagem válida".
+      const temFotoNova = typeof avatarBase64 === 'string' && avatarBase64.startsWith('data:image/');
+      if (temFotoNova) {
         const url = await enviarUpload('avatar', 'avatar.jpg', 'image/jpeg', avatarBase64);
         payload.avatarUrl = url;
       }
@@ -425,7 +453,7 @@
       // texto puro esperando conexão, e foto exige upload de verdade (não
       // tem como acontecer sem rede) — os dois casos pedem tentar de novo
       // já conectado, em vez de enfileirar.
-      if (bpEstaOffline(e) && !senha && !avatarBase64) {
+      if (bpEstaOffline(e) && !senha && !(typeof avatarBase64 === 'string' && avatarBase64.startsWith('data:image/')) && email === sessao.email) {
         cache.sessao = { ...sessao, nome, email };
         bpFilaAdicionar({ caminho: `/usuarios/${sessao.usuarioId}`, metodo: 'PUT', corpo: { nome, email } });
         emitirToast('Sem conexão: dados salvos e serão enviados quando a internet voltar.', 'sucesso');
@@ -699,14 +727,47 @@
     }
   }
 
+  const AJUSTES_BANNER = ['proporcao', 'recorte', 'tamanho-original', 'padrao'];
+
+  /** Como a capa da Home é exibida. Valores antigos ('original'/'cortar') são traduzidos. */
+  async function getAjusteBanner() {
+    const config = await getConfig();
+    const v = config.banner_barbearia_ajuste;
+    if (v === 'original') return 'proporcao';
+    if (v === 'cortar') return 'padrao';
+    return AJUSTES_BANNER.includes(v) ? v : 'padrao';
+  }
+
+  /**
+   * Os destaques logo abaixo da capa da Home ("Desde 2016..."). Devolve a
+   * lista [{ titulo, texto }] salva no banco, ou null se ainda não houver.
+   */
+  async function getFaixaValores() {
+    const config = await getConfig();
+    if (!config.home_faixa_valores) return null;
+    try {
+      const lista = JSON.parse(config.home_faixa_valores);
+      return Array.isArray(lista) ? lista : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function salvarFaixaValores(itens) {
+    return salvarConfig('home_faixa_valores', JSON.stringify(itens));
+  }
+
   async function getBannerBarbearia() {
     const config = await getConfig();
     return config.banner_barbearia_url || null;
   }
 
-  async function salvarBannerBarbearia(base64) {
+  async function salvarBannerBarbearia(base64, ajuste) {
     try {
       const url = await enviarUpload('banner', 'banner.jpg', 'image/jpeg', base64);
+      // Grava como a capa deve ser exibida. Se este passo falhar, a imagem
+      // nova já subiu; o ajuste antigo continua valendo até a próxima troca.
+      if (ajuste) await salvarConfig('banner_barbearia_ajuste', ajuste);
       cache.config = null;
       window.dispatchEvent(new CustomEvent('bp:banner-alterado', { detail: url }));
       emitirToast('Foto de capa atualizada.', 'sucesso');
@@ -1052,8 +1113,57 @@
   /* ---------------------------------------------------------------------
      Upload de arquivos (ImageKit, via /api/upload)
      --------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------
+     Equipe: permissões e pedidos (ver netlify/functions/equipe.js)
+     --------------------------------------------------------------------- */
+  async function getEquipe() {
+    try { return await requisitar('/equipe'); } catch (e) { return null; }
+  }
+
+  // Usada só no aviso periódico: silenciosa, sem toast de erro.
+  async function getPedidosPendentesEquipe() {
+    try {
+      const r = await fetch(`${BASE_URL}/equipe/resumo`, { credentials: 'include' });
+      if (!r.ok) return 0;
+      const corpo = await r.json();
+      return Number(corpo.pendentes) || 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  async function getMinhaPermissaoEquipe() {
+    try { return await requisitar('/equipe/minha'); } catch (e) { return null; }
+  }
+
+  async function solicitarPermissaoCriarBarbeiro() {
+    try { await requisitar('/equipe/solicitar', { method: 'POST', body: '{}' }); return true; } catch (e) { return false; }
+  }
+
+  async function decidirSolicitacaoBarbeiro(id, decisao) {
+    try {
+      await requisitar(`/equipe/solicitacoes/${id}`, { method: 'PUT', body: JSON.stringify({ decisao }) });
+      return true;
+    } catch (e) { return false; }
+  }
+
+  async function definirPermissaoCriarBarbeiros(usuarioId, podeCriarBarbeiros) {
+    try {
+      await requisitar(`/equipe/${usuarioId}/permissao`, { method: 'PUT', body: JSON.stringify({ podeCriarBarbeiros }) });
+      return true;
+    } catch (e) { return false; }
+  }
+
+  async function rebaixarMaster(usuarioId) {
+    try { await requisitar(`/equipe/${usuarioId}/rebaixar`, { method: 'PUT', body: '{}' }); return true; } catch (e) { return false; }
+  }
+
   async function enviarUpload(tipo, nomeArquivo, mimeType, dataUrlOuBase64) {
     const base64 = dataUrlOuBase64.includes(',') ? dataUrlOuBase64.split(',')[1] : dataUrlOuBase64;
+    // Se veio uma data URL, o tipo real da imagem está no prefixo (ex.: um
+    // PNG enviado "no tamanho original" não pode ser declarado como JPEG).
+    const prefixo = /^data:(image\/(?:jpeg|png|webp|gif));base64,/.exec(dataUrlOuBase64);
+    if (prefixo) mimeType = prefixo[1];
     const resultado = await requisitar('/upload', {
       method: 'POST',
       body: JSON.stringify({ tipo, nomeArquivo, mimeType, conteudoBase64: base64 }),
@@ -1073,6 +1183,17 @@
     getSessao,
     usuarioLogado,
     cadastrarUsuario,
+    criarBarbeiro,
+    getEquipe,
+    getPedidosPendentesEquipe,
+    getMinhaPermissaoEquipe,
+    solicitarPermissaoCriarBarbeiro,
+    decidirSolicitacaoBarbeiro,
+    definirPermissaoCriarBarbeiros,
+    rebaixarMaster,
+    getFaixaValores,
+    salvarFaixaValores,
+    getAjusteBanner,
     verificarEmail,
     esqueciSenha,
     redefinirSenha,

@@ -8,7 +8,7 @@
  * hora preenchida (HH:MM) = bloqueia só aquele horário específico.
  */
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson, paraDataISO } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJsonLimitado: corpoJson, paraDataISO, ehDataISO, ehHoraHHMM, comProtecao } = require('./_lib/http');
 const { getUsuarioDaSessao } = require('./_lib/sessao');
 
 function paraApi(linha) {
@@ -21,7 +21,7 @@ function paraApi(linha) {
   };
 }
 
-exports.handler = async (event) => {
+exports.handler = comProtecao(async (event) => {
   const sql = getSql();
 
   if (event.httpMethod === 'GET') {
@@ -29,7 +29,8 @@ exports.handler = async (event) => {
     // cliente precisa saber quais horários estão bloqueados antes mesmo de
     // ele entrar na conta — mesma lógica de /api/horarios-disponiveis.
     const { barbeiroId, data } = event.queryStringParameters || {};
-    if (!barbeiroId) return erro(400, 'Informe o barbeiroId.');
+    if (!barbeiroId || !/^\d{1,18}$/.test(barbeiroId)) return erro(400, 'Informe o barbeiroId.');
+    if (data && !ehDataISO(data)) return erro(400, 'Data inválida.');
 
     const linhas = data
       ? await sql`SELECT * FROM bloqueios_agenda WHERE barbeiro_id = ${barbeiroId} AND data = ${data} ORDER BY hora NULLS FIRST`
@@ -46,7 +47,9 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'POST') {
     const dados = corpoJson(event);
     if (!dados || !dados.data) return erro(400, 'Informe a data do bloqueio.');
+    if (!ehDataISO(dados.data)) return erro(400, 'Data inválida.');
     const hora = dados.hora || null;
+    if (hora && !ehHoraHHMM(hora)) return erro(400, 'Horário inválido.');
     const motivo = dados.motivo ? String(dados.motivo).trim().slice(0, 120) : null;
 
     // Dia inteiro (hora NULL): evita duplicar o mesmo bloqueio de dia
@@ -77,7 +80,7 @@ exports.handler = async (event) => {
 
   if (event.httpMethod === 'DELETE') {
     const id = event.queryStringParameters?.id;
-    if (!id) return erro(400, 'Informe o id do bloqueio.');
+    if (!id || !/^\d{1,18}$/.test(id)) return erro(400, 'Informe o id do bloqueio.');
 
     const [removido] = await sql`
       DELETE FROM bloqueios_agenda
@@ -89,4 +92,4 @@ exports.handler = async (event) => {
   }
 
   return metodoNaoPermitido(['GET', 'POST', 'DELETE']);
-};
+});

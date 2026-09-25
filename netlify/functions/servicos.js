@@ -9,7 +9,7 @@
  *            agendamentos que já usaram esse serviço (requer sessão de equipe)
  */
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson, idDaRequisicao } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJson, idDaRequisicao, comProtecao } = require('./_lib/http');
 const { getUsuarioDaSessao } = require('./_lib/sessao');
 
 function paraCentavos(valorEmReais) {
@@ -27,7 +27,7 @@ function paraApi(linha) {
   };
 }
 
-exports.handler = async (event) => {
+exports.handler = comProtecao(async (event) => {
   const sql = getSql();
   const id = idDaRequisicao(event);
 
@@ -61,6 +61,13 @@ exports.handler = async (event) => {
     // servicos.nome é VARCHAR(120) no banco — mesma lógica das outras
     // checagens de tamanho adicionadas nesta rodada (ver auth-cadastro.js).
     if (nome.length > 120) return erro(400, 'Nome do serviço muito longo (máximo 120 caracteres).');
+    // Limites de sanidade: preço absurdo estourava o INTEGER do banco (erro
+    // 500) e duração enorme gerava sequências de horários gigantes.
+    if (preco > 100000) return erro(400, 'Preço muito alto.');
+    if (!Number.isInteger(duracaoMin) || duracaoMin < 5 || duracaoMin > 480) {
+      return erro(400, 'A duração deve ser um número inteiro de minutos entre 5 e 480.');
+    }
+    if (descricao.length > 500) return erro(400, 'Descrição muito longa (máximo 500 caracteres).');
 
     const [novo] = await sql`
       INSERT INTO servicos (nome, descricao, preco_centavos, duracao_min)
@@ -93,6 +100,13 @@ exports.handler = async (event) => {
       return erro(400, 'Preencha nome e um preço válido.');
     }
     if (nome.length > 120) return erro(400, 'Nome do serviço muito longo (máximo 120 caracteres).');
+    // Limites de sanidade: preço absurdo estourava o INTEGER do banco (erro
+    // 500) e duração enorme gerava sequências de horários gigantes.
+    if (preco > 100000) return erro(400, 'Preço muito alto.');
+    if (!Number.isInteger(duracaoMin) || duracaoMin < 5 || duracaoMin > 480) {
+      return erro(400, 'A duração deve ser um número inteiro de minutos entre 5 e 480.');
+    }
+    if (descricao.length > 500) return erro(400, 'Descrição muito longa (máximo 500 caracteres).');
 
     // IMPORTANTE: esta atualização NUNCA toca em agendamento_servicos —
     // o snapshot de nome/preço gravado na hora da marcação permanece
@@ -117,4 +131,4 @@ exports.handler = async (event) => {
   }
 
   return metodoNaoPermitido(['GET', 'POST', 'PUT', 'DELETE']);
-};
+});

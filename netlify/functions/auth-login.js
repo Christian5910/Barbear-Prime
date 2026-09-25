@@ -4,10 +4,11 @@
  */
 const bcrypt = require('bcryptjs');
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJsonLimitado: corpoJson, ipDoCliente, comProtecao } = require('./_lib/http');
+const { excedeuLimite, registrarUso } = require('./_lib/limite');
 const { criarSessao } = require('./_lib/sessao');
 
-exports.handler = async (event) => {
+exports.handler = comProtecao(async (event) => {
   if (event.httpMethod !== 'POST') return metodoNaoPermitido(['POST']);
 
   const dados = corpoJson(event);
@@ -16,9 +17,11 @@ exports.handler = async (event) => {
   const email = String(dados.email || '').trim().toLowerCase();
   const senha = String(dados.senha || '');
   if (!email || !senha) return erro(400, 'Informe e-mail e senha.');
+  // Teto no tamanho: bcrypt.compare com uma "senha" gigante gastava CPU à toa.
+  if (email.length > 190 || senha.length > 128) return erro(401, 'Usuário ou senha inválidos.');
 
   const sql = getSql();
-  const clienteIp = event.headers?.['x-forwarded-for']?.split(',')[0]?.trim() || null;
+  const clienteIp = ipDoCliente(event);
 
   // Rate limit básico: bloqueia depois de muitas tentativas falhas
   // seguidas para o mesmo e-mail em uma janela curta. A tabela
@@ -35,8 +38,16 @@ exports.handler = async (event) => {
     return erro(429, `Muitas tentativas de login para este e-mail. Aguarde ${JANELA_MINUTOS} minutos e tente novamente.`);
   }
 
+  // Limite por IP (além do limite por e-mail acima): quem testa a MESMA
+  // senha em centenas de e-mails diferentes nunca bateria o limite por
+  // e-mail (credential stuffing).
+  const chaveIp = `login-falha:${clienteIp}`;
+  if (await excedeuLimite(sql, chaveIp, 30, 15)) {
+    return erro(429, `Muitas tentativas de login deste dispositivo. Aguarde ${JANELA_MINUTOS} minutos e tente novamente.`);
+  }
+
   const usuarios = await sql`
-    SELECT id, nome, email, senha_hash, papel, avatar_url, email_verificado, master
+    SELECT id, nome, email, senha_hash, papel, avatar_url, email_verificado, master, master_raiz, pode_criar_barbeiros
     FROM usuarios
     WHERE email = ${email} AND ativo = TRUE
     LIMIT 1
@@ -64,6 +75,7 @@ exports.handler = async (event) => {
   `;
 
   if (!usuario || !senhaValida) {
+    await registrarUso(sql, chaveIp);
     return erro(401, 'Usuário ou senha inválidos.');
   }
 
@@ -79,4 +91,4 @@ exports.handler = async (event) => {
   const { senha_hash, email_verificado, ...usuarioPublico } = usuario;
 
   return json(200, { usuario: usuarioPublico }, { 'Set-Cookie': setCookie });
-};
+});

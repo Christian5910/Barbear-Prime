@@ -8,42 +8,23 @@
  */
 const bcrypt = require('bcryptjs');
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson, idDaRequisicao } = require('./_lib/http');
-const { getUsuarioDaSessao, encerrarSessao } = require('./_lib/sessao');
+const { json, erro, metodoNaoPermitido, corpoJsonLimitado: corpoJson, idDaRequisicao, comProtecao } = require('./_lib/http');
+const { getUsuarioDaSessao, encerrarSessao, tokenHashDaRequisicao } = require('./_lib/sessao');
+const { normalizarUrlImagem } = require('./_lib/urls');
+const { excedeuLimite, registrarUso } = require('./_lib/limite');
 
 const CUSTO_BCRYPT = 12;
 
-// Valida/normaliza a URL de avatar antes de gravar. Em uso normal, esse
-// valor sempre chega aqui como a URL que o próprio /api/upload acabou de
-// devolver (depois de validar tipo/tamanho/assinatura do arquivo) — mas
-// esta function não tem como saber disso, então NUNCA deve confiar
-// cegamente numa string arbitrária vinda do corpo da requisição: qualquer
-// pessoa logada poderia chamar PUT /api/usuarios/:id diretamente (sem
-// passar pela tela) com um "avatarUrl" contendo aspas e um atributo tipo
-// onerror="...", o que quebraria o `src="..."` no HTML de quem visse esse
-// avatar depois (por exemplo, a equipe olhando a lista de agendamentos) e
-// rodaria JavaScript arbitrário na sessão de quem estiver vendo. Exigir
-// que seja uma URL http(s) bem formada e regravar a versão normalizada
-// (via `new URL(...).href`) neutraliza isso: aspas/`<`/`>` inseridos no
-// caminho ou na query são sempre percent-encoded pelo parser de URL, então
-// não sobra como escapar de um atributo HTML mesmo se o front-end um dia
-// esquecer de escapar esse valor também.
+// A URL de avatar só é aceita se for uma imagem hospedada pelo próprio site
+// (ImageKit ou /assets/) — ver _lib/urls.js para o raciocínio completo.
+// Em uso normal esse valor é a URL que o próprio /api/upload acabou de
+// devolver; esta checagem existe para quem chamar a API direto.
 function validarUrlImagem(valor) {
-  if (valor === undefined) return undefined; // campo não enviado — não mexe
-  if (valor === null || valor === '') return null; // remoção explícita
-  let url;
-  try {
-    url = new URL(String(valor));
-  } catch (e) {
-    throw new Error('URL de avatar inválida.');
-  }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new Error('URL de avatar inválida.');
-  }
-  return url.href;
+  if (valor === undefined) return undefined; // campo não enviado: não mexe
+  return normalizarUrlImagem(valor, 'foto de perfil');
 }
 
-exports.handler = async (event) => {
+exports.handler = comProtecao(async (event) => {
   const id = idDaRequisicao(event);
   if (!id) return erro(400, 'Informe o id do usuário na URL.');
 
@@ -60,6 +41,7 @@ exports.handler = async (event) => {
 
     const nome = dados.nome !== undefined ? String(dados.nome).trim() : usuarioLogado.nome;
     const email = dados.email !== undefined ? String(dados.email).trim().toLowerCase() : usuarioLogado.email;
+    if (typeof dados.nome === 'object' && dados.nome !== null) return erro(400, 'Nome inválido.');
 
     if (!nome || !email) return erro(400, 'Nome e e-mail não podem ficar vazios.');
     // Mesmos limites de auth-cadastro.js (ver comentário lá) — usuarios.nome
@@ -77,8 +59,33 @@ exports.handler = async (event) => {
 
     let senhaHash = null;
     if (dados.senha) {
-      if (String(dados.senha).length < 6) return erro(400, 'A senha deve ter pelo menos 6 caracteres.');
-      senhaHash = await bcrypt.hash(String(dados.senha), CUSTO_BCRYPT);
+      const novaSenha = String(dados.senha);
+      if (novaSenha.length < 6) return erro(400, 'A senha deve ter pelo menos 6 caracteres.');
+      // bcrypt só usa os primeiros 72 bytes e o custo cresce com o texto:
+      // sem teto, uma "senha" de vários MB gastava CPU à toa.
+      if (novaSenha.length > 128) return erro(400, 'A senha deve ter no máximo 128 caracteres.');
+      senhaHash = await bcrypt.hash(novaSenha, CUSTO_BCRYPT);
+    }
+
+    // Trocar senha ou e-mail exige a SENHA ATUAL. Sem isso, quem pegasse
+    // uma sessão aberta (computador emprestado, celular sem bloqueio)
+    // trocava a senha e o e-mail e ficava dono da conta para sempre.
+    const trocaCredencial = Boolean(senhaHash) || email !== usuarioLogado.email;
+    if (trocaCredencial) {
+      const chaveTentativa = `senha-atual:${id}`;
+      if (await excedeuLimite(sql, chaveTentativa, 5, 15)) {
+        return erro(429, 'Muitas tentativas. Aguarde alguns minutos e tente de novo.');
+      }
+      const [dono] = await sql`SELECT senha_hash FROM usuarios WHERE id = ${id} LIMIT 1`;
+      const senhaAtual = String(dados.senhaAtual || '');
+      let confere = false;
+      if (senhaAtual && senhaAtual.length <= 128 && dono) {
+        confere = await bcrypt.compare(senhaAtual, dono.senha_hash);
+      }
+      if (!confere) {
+        await registrarUso(sql, chaveTentativa);
+        return erro(403, 'Informe corretamente a sua senha atual para trocar a senha ou o e-mail.');
+      }
     }
 
     let avatarUrl;
@@ -98,6 +105,12 @@ exports.handler = async (event) => {
       WHERE id = ${id}
       RETURNING id, nome, email, papel, avatar_url
     `;
+    // Trocou a senha: derruba as OUTRAS sessões (outros aparelhos/navegadores),
+    // mantendo só a atual. Quem estivesse com a senha antiga perde o acesso.
+    if (senhaHash) {
+      const atual = tokenHashDaRequisicao(event);
+      await sql`DELETE FROM sessoes WHERE usuario_id = ${id} AND token_hash <> ${atual || ''}`;
+    }
     return json(200, { usuario: atualizado });
   }
 
@@ -106,8 +119,10 @@ exports.handler = async (event) => {
     // mesma. Precisa sempre existir alguém que consiga convidar barbeiro
     // novo, editar endereço/serviços e trocar o banner do painel; sem essa
     // trava, a barbearia inteira ficaria sem ninguém com esse acesso.
-    if (usuarioLogado.master) {
-      return erro(409, 'A conta master não pode ser excluída.');
+    // (Com vários masters, só a master RAIZ é protegida; um master criado
+    // depois pode excluir a própria conta. A raiz só sai direto no banco.)
+    if (usuarioLogado.master_raiz) {
+      return erro(409, 'A conta master principal não pode ser excluída.');
     }
     if (usuarioLogado.papel === 'equipe') {
       const [{ total }] = await sql`
@@ -123,4 +138,4 @@ exports.handler = async (event) => {
   }
 
   return metodoNaoPermitido(['PUT', 'DELETE']);
-};
+});

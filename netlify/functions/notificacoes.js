@@ -4,8 +4,9 @@
  *   PUT — salva/atualiza (upsert)
  */
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson, idDaRequisicao } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJson, idDaRequisicao, comProtecao } = require('./_lib/http');
 const { getUsuarioDaSessao } = require('./_lib/sessao');
+const { normalizarUrlImagem } = require('./_lib/urls');
 
 const SONS_VALIDOS = ['padrao', 'sino', 'navalha', 'personalizado', 'silencioso'];
 
@@ -24,7 +25,7 @@ function paraApi(linha) {
   };
 }
 
-exports.handler = async (event) => {
+exports.handler = comProtecao(async (event) => {
   const usuarioId = idDaRequisicao(event, 'usuarioId');
   if (!usuarioId) return erro(400, 'Informe o usuarioId.');
 
@@ -56,10 +57,9 @@ exports.handler = async (event) => {
     let somPersonalizadoUrl = null;
     const urlBruta = dados.somPersonalizado?.url;
     if (urlBruta) {
+      // Só aceita áudio que o próprio site enviou (ImageKit) ou de /assets/.
       try {
-        const url = new URL(String(urlBruta));
-        if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error();
-        somPersonalizadoUrl = url.href;
+        somPersonalizadoUrl = normalizarUrlImagem(urlBruta, 'som personalizado');
       } catch (e) {
         return erro(400, 'URL de som personalizado inválida.');
       }
@@ -71,7 +71,9 @@ exports.handler = async (event) => {
     // Só faz sentido pra conta de equipe (é o barbeiro sendo avisado da
     // própria agenda) — ignora silenciosamente se marcado por uma conta
     // de cliente, em vez de gravar um estado que nunca vai ser usado.
-    const notifEmailAgendamentos = Boolean(dados.notifEmailAgendamentos) && usuarioLogado.papel === 'equipe';
+    // Vale para barbeiros (aviso de novo pedido na agenda) e para clientes
+    // (confirmação do próprio pedido).
+    const notifEmailAgendamentos = Boolean(dados.notifEmailAgendamentos);
 
     const [salvo] = await sql`
       INSERT INTO preferencias_notificacao
@@ -98,4 +100,4 @@ exports.handler = async (event) => {
   }
 
   return metodoNaoPermitido(['GET', 'PUT']);
-};
+});

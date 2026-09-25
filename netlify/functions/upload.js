@@ -22,9 +22,18 @@
  *                        no tamanho em bytes como segunda barreira)
  */
 const crypto = require('crypto');
-const { json, erro, metodoNaoPermitido, corpoJson } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJson, comProtecao } = require('./_lib/http');
 const { getUsuarioDaSessao } = require('./_lib/sessao');
 const { getSql } = require('./_lib/db');
+const { validarImagem, validarAudio, ArquivoInvalido } = require('./_lib/imagem');
+const { excedeuLimite, registrarUso } = require('./_lib/limite');
+
+// Teto do corpo da requisição inteira (JSON + base64 do maior arquivo, 2 MB
+// viram ~2,8 MB em base64). Recusar antes de decodificar evita gastar
+// memória com um corpo enorme só para descobrir depois que passou do limite.
+const LIMITE_CORPO_BYTES = 3 * 1024 * 1024;
+// Máximo de envios por pessoa: cada arquivo ocupa espaço no ImageKit.
+const MAX_UPLOADS_POR_HORA = 20;
 
 const LIMITES_BYTES = {
   avatar: 2 * 1024 * 1024,
@@ -47,29 +56,6 @@ const MIME_PERMITIDOS = {
   icone: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
   som: ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/aiff', 'audio/x-aiff', 'audio/aac', 'audio/mp4', 'audio/ogg'],
 };
-
-// Assinatura (primeiros bytes) de cada formato de imagem aceito — uma
-// segunda camada de verificação, já que o mimeType em si é só uma
-// declaração do cliente e poderia mentir mesmo estando na lista branca
-// acima (ex.: mandar "image/png" mas o conteúdo real ser outra coisa).
-const ASSINATURAS_IMAGEM = [
-  { mime: 'image/png', bytes: [0x89, 0x50, 0x4e, 0x47] },
-  { mime: 'image/jpeg', bytes: [0xff, 0xd8, 0xff] },
-  { mime: 'image/gif', bytes: [0x47, 0x49, 0x46, 0x38] },
-  // WEBP: 'RIFF' nos primeiros 4 bytes + 'WEBP' a partir do byte 8 —
-  // só o 'RIFF' sozinho não basta pra confirmar (WAV de áudio também
-  // começa com 'RIFF').
-  { mime: 'image/webp', bytes: [0x52, 0x49, 0x46, 0x46], offsetExtra: 8, bytesExtra: [0x57, 0x45, 0x42, 0x50] },
-];
-
-function pareceImagemValida(buffer) {
-  return ASSINATURAS_IMAGEM.some(({ bytes, offsetExtra, bytesExtra }) => {
-    const prefixoOk = bytes.every((b, i) => buffer[i] === b);
-    if (!prefixoOk) return false;
-    if (!offsetExtra) return true;
-    return bytesExtra.every((b, i) => buffer[offsetExtra + i] === b);
-  });
-}
 
 const EXTENSAO_POR_MIME = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif',
@@ -104,18 +90,24 @@ async function enviarParaImageKit(buffer, mimeType, nomeBase, pasta) {
   return resultado.url;
 }
 
-exports.handler = async (event) => {
+exports.handler = comProtecao(async (event) => {
   if (event.httpMethod !== 'POST') return metodoNaoPermitido(['POST']);
 
   const usuario = await getUsuarioDaSessao(event);
   if (!usuario) return erro(401, 'Entre na sua conta para continuar.');
 
+  if (event.body && Buffer.byteLength(event.body, 'utf8') > LIMITE_CORPO_BYTES) {
+    return erro(413, 'Arquivo grande demais.');
+  }
   const dados = corpoJson(event);
   if (!dados) return erro(400, 'JSON inválido.');
 
-  const { tipo, nomeArquivo, mimeType, conteudoBase64 } = dados;
-  if (!LIMITES_BYTES[tipo]) return erro(400, 'Tipo de upload inválido.');
-  if (!conteudoBase64) return erro(400, 'Envie o arquivo em conteudoBase64.');
+  const { tipo, nomeArquivo, mimeType } = dados;
+  let { conteudoBase64 } = dados;
+  if (typeof tipo !== 'string' || !Object.prototype.hasOwnProperty.call(LIMITES_BYTES, tipo)) {
+    return erro(400, 'Tipo de upload inválido.');
+  }
+  if (typeof conteudoBase64 !== 'string' || !conteudoBase64) return erro(400, 'Envie o arquivo em conteudoBase64.');
 
   if (!MIME_PERMITIDOS[tipo].includes(mimeType)) {
     return erro(400, `Tipo de arquivo não aceito para ${tipo}. Use: ${MIME_PERMITIDOS[tipo].join(', ')}.`);
@@ -129,28 +121,57 @@ exports.handler = async (event) => {
     return erro(403, 'Apenas o barbeiro master pode alterar essa imagem.');
   }
 
-  const buffer = Buffer.from(conteudoBase64, 'base64');
+  const sql = getSql();
+  const chaveLimite = `upload:${usuario.id}`;
+  if (await excedeuLimite(sql, chaveLimite, MAX_UPLOADS_POR_HORA, 60)) {
+    return erro(429, 'Muitos envios em pouco tempo. Tente novamente em alguns minutos.');
+  }
+
+  // Aceita tanto base64 puro quanto uma "data URL" completa.
+  conteudoBase64 = conteudoBase64.replace(/^data:[^;,]{1,60};base64,/, '');
+  // Confere o TAMANHO antes de decodificar: 4 caracteres base64 = 3 bytes.
+  if (Math.floor(conteudoBase64.length * 3 / 4) > LIMITES_BYTES[tipo] + 4) {
+    const limiteMb = LIMITES_BYTES[tipo] / (1024 * 1024);
+    return erro(413, `Arquivo maior que o limite de ${limiteMb}MB.`);
+  }
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(conteudoBase64)) {
+    return erro(400, 'Conteúdo do arquivo inválido.');
+  }
+  let buffer = Buffer.from(conteudoBase64, 'base64');
   if (buffer.length > LIMITES_BYTES[tipo]) {
     const limiteMb = LIMITES_BYTES[tipo] / (1024 * 1024);
     return erro(413, `Arquivo maior que o limite de ${limiteMb}MB.`);
   }
 
-  // Segunda camada de verificação pra imagens: confere que os primeiros
-  // bytes do arquivo batem com algum formato de imagem de verdade, não
-  // só confiar na palavra do mimeType declarado.
-  if (tipo !== 'som' && !pareceImagemValida(buffer)) {
-    return erro(400, 'O arquivo enviado não parece ser uma imagem válida.');
+  // Confere o CONTEÚDO de verdade (não a palavra do cliente): formato real,
+  // dimensões (barra "bomba de descompressão": poucos KB que viram
+  // gigabytes de pixels), bytes escondidos depois do fim do arquivo e
+  // metadados privados (EXIF/GPS). Ver _lib/imagem.js.
+  let mimeFinal = mimeType;
+  try {
+    if (tipo === 'som') {
+      validarAudio(buffer);
+    } else {
+      const imagem = validarImagem(buffer);
+      buffer = imagem.buffer;
+      mimeFinal = imagem.mime; // o formato detectado manda, não o declarado
+    }
+  } catch (e) {
+    if (e instanceof ArquivoInvalido) return erro(400, e.message);
+    throw e;
   }
+
+  await registrarUso(sql, chaveLimite);
 
   const nomeBase = `${tipo}-${usuario.id}-${crypto.randomUUID()}`;
   let urlPublica;
   try {
-    urlPublica = await enviarParaImageKit(buffer, mimeType, nomeBase, tipo);
+    urlPublica = await enviarParaImageKit(buffer, mimeFinal, nomeBase, tipo);
   } catch (e) {
-    return erro(502, `Não foi possível enviar o arquivo agora (${e.message}). Tente novamente em instantes.`);
+    console.error('Falha no envio ao ImageKit:', e.message);
+    return erro(502, 'Não foi possível enviar o arquivo agora. Tente novamente em instantes.');
   }
 
-  const sql = getSql();
   if (tipo === 'avatar') {
     await sql`UPDATE usuarios SET avatar_url = ${urlPublica} WHERE id = ${usuario.id}`;
   } else if (tipo === 'banner') {
@@ -176,4 +197,4 @@ exports.handler = async (event) => {
   }
 
   return json(200, { url: urlPublica });
-};
+});

@@ -17,10 +17,10 @@
  *     já marcados.
  */
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson, idDaRequisicao, paraDataISO } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJsonLimitado: corpoJson, idDaRequisicao, paraDataISO, ehDataISO, ehHoraHHMM, comProtecao } = require('./_lib/http');
 const { getUsuarioDaSessao } = require('./_lib/sessao');
 const { slotsNecessarios, sequenciaValidaNoDia, horariosBloqueadosNoDia } = require('./_lib/horarios');
-const { enviarEmailNovoAgendamento } = require('./_lib/email');
+const { enviarEmailNovoAgendamento, enviarEmailAgendamentoCliente } = require('./_lib/email');
 
 const DIAS_SEMANA_PT = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
 const MESES_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
@@ -85,7 +85,7 @@ function montarAgendamentoApi(agendamento, servicos, horarios) {
   };
 }
 
-exports.handler = async (event) => {
+exports.handler = comProtecao(async (event) => {
   const sql = getSql();
   const id = idDaRequisicao(event);
 
@@ -134,10 +134,18 @@ exports.handler = async (event) => {
     const dados = corpoJson(event);
     if (!dados) return erro(400, 'JSON inválido.');
 
-    const servicoIds = (dados.servicoIds || []).map(String);
+    // Tipos e tamanhos conferidos antes de qualquer consulta: sem isso um
+    // servicoIds que não é lista dava erro 500, e uma lista com milhares de
+    // itens virava uma consulta enorme ao banco.
+    if (!Array.isArray(dados.servicoIds) || dados.servicoIds.length === 0 || dados.servicoIds.length > 10) {
+      return erro(400, 'Selecione de 1 a 10 serviços.');
+    }
+    const servicoIds = dados.servicoIds.map(String);
+    if (servicoIds.some(v => !/^\d{1,18}$/.test(v))) return erro(400, 'Serviço inválido.');
     const data = dados.data;
     const hora = dados.hora;
-    const barbeiroId = dados.barbeiroId ? Number(dados.barbeiroId) : null;
+    if (!ehDataISO(data) || !ehHoraHHMM(hora)) return erro(400, 'Data ou horário inválido.');
+    const barbeiroId = dados.barbeiroId && /^\d{1,18}$/.test(String(dados.barbeiroId)) ? Number(dados.barbeiroId) : null;
     // Nome do cliente: da sessão (agendamento normal) ou informado pela
     // equipe (agendamento manual para cliente sem conta).
     const clienteNome = usuarioLogado.papel === 'equipe' && dados.clienteNome
@@ -274,6 +282,26 @@ exports.handler = async (event) => {
       } catch (e) {
         console.error('Falha ao enviar e-mail de novo agendamento (agendamento já criado normalmente):', e.message);
       }
+
+      // Versão do e-mail voltada para o CLIENTE: só vai para quem ligou
+      // "Receber notificações via e-mail de meus agendamentos" em Ajustes.
+      try {
+        const [prefCliente] = await sql`
+          SELECT COALESCE(notif_email_agendamentos, FALSE) AS notif_email
+          FROM preferencias_notificacao WHERE usuario_id = ${usuarioLogado.id} LIMIT 1
+        `;
+        if (prefCliente?.notif_email) {
+          const [barbeiroInfo] = await sql`SELECT nome FROM usuarios WHERE id = ${barbeiroIdFinal} LIMIT 1`;
+          await enviarEmailAgendamentoCliente(event, usuarioLogado.email, usuarioLogado.nome, {
+            barbeiroNome: barbeiroInfo?.nome || 'Barbeiro',
+            dataFormatada: formatarDataPtBr(data),
+            hora,
+            servicos: servicosSalvos.map(s => s.nome_snapshot).join(', '),
+          });
+        }
+      } catch (e) {
+        console.error('Falha ao enviar e-mail de confirmação ao cliente (agendamento já criado normalmente):', e.message);
+      }
     }
 
     return json(201, { agendamento: montarAgendamentoApi(novoAgendamento, servicosSalvos, sequencia) });
@@ -336,6 +364,7 @@ exports.handler = async (event) => {
       const novaData = dados.data;
       const novaHora = dados.hora;
       if (!novaData || !novaHora) return erro(400, 'Informe a nova data e horário.');
+      if (!ehDataISO(novaData) || !ehHoraHHMM(novaHora)) return erro(400, 'Data ou horário inválido.');
 
       const servicosAtuais = await sql`SELECT servico_id FROM agendamento_servicos WHERE agendamento_id = ${id}`;
       const servicoIds = servicosAtuais.map(s => s.servico_id).filter(Boolean);
@@ -385,4 +414,4 @@ exports.handler = async (event) => {
   }
 
   return metodoNaoPermitido(['GET', 'POST', 'PUT']);
-};
+});

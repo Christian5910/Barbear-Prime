@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#1A1613">
 <link rel="apple-touch-icon" href="../assets/img/icon-192.png">
 <link rel="icon" href="../assets/img/icon-192.png">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <link rel="stylesheet" href="../assets/css/style.css">
 <script>!function(){var t=sessionStorage.getItem("bp-tema"),e=sessionStorage.getItem("bp-escala-fonte");t&&document.documentElement.setAttribute("data-tema",t);e&&document.documentElement.style.setProperty("--escala-fonte",e);}();</script>
@@ -75,18 +75,17 @@
         </div>
         <p class="texto-suave small mb-2" id="explicacaoNotifAgendamentos">Avisa no dia do seu corte e 1 hora antes do horário marcado.</p>
 
-        <!-- Só aparece pra conta de equipe (ver ui.js) — o backend também
-             ignora esse campo se vier de uma conta de cliente (ver
-             notificacoes.js), então esconder aqui é só conveniência de UX,
-             não a única proteção. -->
-        <div id="blocoNotifEmailEquipe" style="display:none;">
+        <!-- Vale para todas as contas, com texto próprio de cada uma (o ui.js
+             troca a explicação conforme seja barbeiro ou cliente). O envio
+             de verdade é decidido no servidor (agendamentos.js). -->
+        <div id="blocoNotifEmail">
           <div class="d-flex justify-content-between align-items-center py-1 form-switch-prime">
             <label for="notifEmailAgendamentos" class="small m-0">E-mail de novo agendamento</label>
             <div class="form-check form-switch m-0">
               <input class="form-check-input" type="checkbox" id="notifEmailAgendamentos">
             </div>
           </div>
-          <p class="texto-suave small mb-2">Manda um e-mail pra você sempre que um cliente marcar um horário na sua agenda, além do aviso dentro do app.</p>
+          <p class="texto-suave small mb-2" id="explicacaoNotifEmail">Manda um e-mail com os detalhes sempre que um horário for marcado.</p>
         </div>
 
         <div class="d-flex justify-content-between align-items-center py-1 form-switch-prime">
@@ -128,7 +127,7 @@
       <a href="perfil.html" class="nav-item" data-nav="perfil"><i class="bi bi-person"></i><span>Perfil</span></a>
       <a href="preferencias-app.html" class="nav-item" data-nav="config"><i class="bi bi-gear"></i><span>Ajustes</span></a>
     </nav>
-    <footer class="rodape-site">© 2026 Barbear Prime. Todos os direitos reservados.</footer>
+    <footer class="rodape-site">© <span data-ano-rodape>2026</span> Barbear Prime. Todos os direitos reservados.</footer>
   </div>
 </div>
 
@@ -168,7 +167,7 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 <script src="../database/db.js" defer></script>
 <script src="../assets/src/ui.js" defer></script>
 </body>

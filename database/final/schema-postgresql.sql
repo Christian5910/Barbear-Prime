@@ -42,10 +42,18 @@ CREATE TABLE usuarios (
   criado_em         TIMESTAMPTZ NOT NULL DEFAULT now(),
   atualizado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- No máximo uma conta master por vez — reforçado aqui no banco, não só
--- na lógica das functions, pra nunca dar pra criar uma segunda master
--- nem por engano nem por um bug futuro em algum endpoint.
-CREATE UNIQUE INDEX idx_usuarios_master_unico ON usuarios (master) WHERE master = TRUE;
+-- Hierarquia da equipe (ver migracao-hierarquia-barbeiros.sql):
+--   master_raiz          a conta original da barbearia. Só existe UMA, nunca
+--                        pode ser excluída nem rebaixada.
+--   master               pode haver vários masters (a raiz + os que ela ou
+--                        outro master criou conscientemente).
+--   pode_criar_barbeiros permissão dada por um master a um barbeiro comum
+--                        para criar outros barbeiros COMUNS (nunca master).
+--   criado_por           quem criou a conta (auditoria).
+ALTER TABLE usuarios ADD COLUMN master_raiz BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE usuarios ADD COLUMN pode_criar_barbeiros BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE usuarios ADD COLUMN criado_por BIGINT REFERENCES usuarios(id) ON DELETE SET NULL;
+CREATE UNIQUE INDEX idx_usuarios_master_raiz_unico ON usuarios (master_raiz) WHERE master_raiz = TRUE;
 CREATE INDEX idx_usuarios_papel ON usuarios (papel);
 
 -- ----------------------------------------------------------------------------
@@ -248,3 +256,28 @@ CREATE TRIGGER trg_config_app_atualizado BEFORE UPDATE ON config_app
   FOR EACH ROW EXECUTE FUNCTION atualizar_timestamp();
 CREATE TRIGGER trg_preferencias_notif_atualizado BEFORE UPDATE ON preferencias_notificacao
   FOR EACH ROW EXECUTE FUNCTION atualizar_timestamp();
+
+-- ----------------------------------------------------------------------------
+-- Pedidos de barbeiros comuns para poderem criar outros barbeiros comuns.
+-- Um master aprova ou nega na aba Perfil.
+-- ----------------------------------------------------------------------------
+CREATE TABLE solicitacoes_criacao_barbeiro (
+  id             BIGSERIAL PRIMARY KEY,
+  solicitante_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  status         VARCHAR(12) NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'aprovada', 'negada')),
+  decidido_por   BIGINT REFERENCES usuarios(id) ON DELETE SET NULL,
+  criado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decidido_em    TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX idx_solicitacoes_uma_pendente ON solicitacoes_criacao_barbeiro (solicitante_id) WHERE status = 'pendente';
+
+-- ----------------------------------------------------------------------------
+-- Contador genérico para limitar abusos (cadastros em massa, uploads, etc.).
+-- Ver netlify/functions/_lib/limite.js.
+-- ----------------------------------------------------------------------------
+CREATE TABLE limites_uso (
+  id        BIGSERIAL PRIMARY KEY,
+  chave     VARCHAR(190) NOT NULL,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_limites_uso_chave_data ON limites_uso (chave, criado_em);

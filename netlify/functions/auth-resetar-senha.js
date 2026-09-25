@@ -19,12 +19,12 @@
  */
 const bcrypt = require('bcryptjs');
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJsonLimitado: corpoJson, comProtecao } = require('./_lib/http');
 const { hashToken } = require('./_lib/tokens');
 
 const CUSTO_BCRYPT = 12;
 
-exports.handler = async (event) => {
+exports.handler = comProtecao(async (event) => {
   if (event.httpMethod !== 'POST') return metodoNaoPermitido(['POST']);
 
   const dados = corpoJson(event);
@@ -33,6 +33,7 @@ exports.handler = async (event) => {
 
   if (!token) return erro(400, 'Token ausente.');
   if (novaSenha.length < 6) return erro(400, 'A nova senha deve ter pelo menos 6 caracteres.');
+  if (novaSenha.length > 128) return erro(400, 'A nova senha deve ter no máximo 128 caracteres.');
 
   const sql = getSql();
   const tokenHash = hashToken(token);
@@ -55,8 +56,17 @@ exports.handler = async (event) => {
 
   const senhaHash = await bcrypt.hash(novaSenha, CUSTO_BCRYPT);
 
+  // Consome o token de forma ATÔMICA: se dois pedidos chegarem juntos com o
+  // mesmo link, só um consegue marcar usado_em (o outro recebe 0 linhas).
+  const consumido = await sql`
+    UPDATE recuperacoes_senha SET usado_em = now()
+    WHERE id = ${linha.id} AND usado_em IS NULL
+    RETURNING id
+  `;
+  if (!consumido.length) {
+    return erro(400, 'Este link já foi usado. Peça uma nova redefinição de senha.');
+  }
   await sql`UPDATE usuarios SET senha_hash = ${senhaHash}, email_verificado = TRUE WHERE id = ${linha.usuario_id}`;
-  await sql`UPDATE recuperacoes_senha SET usado_em = now() WHERE id = ${linha.id}`;
   // Qualquer outro token de redefinição pendente dessa conta também perde
   // a validade (não tem porque deixar mais de um link "vivo" depois que
   // um já funcionou).
@@ -64,4 +74,4 @@ exports.handler = async (event) => {
   await sql`DELETE FROM sessoes WHERE usuario_id = ${linha.usuario_id}`;
 
   return json(200, { ok: true, mensagem: 'Senha redefinida! Você já pode entrar com a nova senha.' });
-};
+});

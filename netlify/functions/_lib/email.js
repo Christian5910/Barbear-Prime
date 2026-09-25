@@ -16,6 +16,8 @@
  *                       Sem "/" no final.
  */
 
+const { escaparHtml: esc } = require('./http');
+
 function envFaltando(nome) {
   return new Error(
     `${nome} não configurada. Veja o passo do Resend em DEPLOY.md na raiz do projeto.`
@@ -84,15 +86,18 @@ async function enviarEmail({ para, assunto, html, texto }) {
 }
 
 function urlSite(event) {
-  const configurado = process.env.SITE_URL;
+  // 1) SITE_URL (configurada por você) e 2) URL (que o próprio Netlify
+  // preenche com o endereço principal do site) são confiáveis.
+  const configurado = process.env.SITE_URL || process.env.URL;
   if (configurado) return configurado.replace(/\/$/, '');
-  // Sem SITE_URL configurada: deduz a partir de quem chamou a API (o
-  // próprio domínio *.netlify.app do site, por exemplo) — assim não
-  // precisa configurar nada antes do primeiro teste. Configure SITE_URL
-  // mais tarde (ex.: ao trocar para um domínio próprio) para fixar o
-  // valor em vez de depender do cabeçalho da requisição.
+  // Última reserva (ex.: `netlify dev`): deduz do cabeçalho da requisição,
+  // mas SÓ aceita domínios *.netlify.app ou localhost. Um cabeçalho Host/
+  // X-Forwarded-Host forjado poderia apontar o link do e-mail (confirmação,
+  // redefinição de senha) para um site do atacante.
   const host = event?.headers?.['x-forwarded-host'] || event?.headers?.host;
-  if (host) return `https://${host}`;
+  if (host && /^([a-z0-9-]+\.netlify\.app|localhost(:\d+)?)$/i.test(host)) {
+    return `${host.startsWith('localhost') ? 'http' : 'https'}://${host}`;
+  }
   throw envFaltando('SITE_URL');
 }
 
@@ -113,7 +118,7 @@ function envelope({ titulo, corpoHtml, textoBotao, linkBotao }) {
             </tr>
             <tr>
               <td style="padding:24px;color:#e6e6e6;font-size:15px;line-height:1.5;">
-                <h1 style="color:#fff;font-size:20px;margin:0 0 16px;">${titulo}</h1>
+                <h1 style="color:#fff;font-size:20px;margin:0 0 16px;">${esc(titulo)}</h1>
                 ${corpoHtml}
                 <div style="text-align:center;margin:28px 0;">
                   <a href="${linkBotao}" style="background:#c9a227;color:#111;text-decoration:none;font-weight:bold;padding:12px 28px;border-radius:8px;display:inline-block;">${textoBotao}</a>
@@ -145,7 +150,7 @@ async function enviarEmailRecuperacaoSenha(event, para, nome, tokenBruto) {
   const link = `${urlSite(event)}/sites/redefinir-senha.html?token=${tokenBruto}`;
   const html = envelope({
     titulo: `Redefinir senha`,
-    corpoHtml: `<p>Olá, ${nome}. Pediram a redefinição da senha desta conta no Barbear Prime. Se foi você, clique no botão abaixo para escolher uma senha nova — o link expira em 1 hora.</p><p>Se você não pediu isso, pode ignorar este e-mail: sua senha continua a mesma.</p>`,
+    corpoHtml: `<p>Olá, ${esc(nome)}. Pediram a redefinição da senha desta conta no Barbear Prime. Se foi você, clique no botão abaixo para escolher uma senha nova — o link expira em 1 hora.</p><p>Se você não pediu isso, pode ignorar este e-mail: sua senha continua a mesma.</p>`,
     textoBotao: 'Criar nova senha',
     linkBotao: link,
   });
@@ -157,13 +162,16 @@ async function enviarEmailRecuperacaoSenha(event, para, nome, tokenBruto) {
  * Avisa o barbeiro por e-mail quando um cliente cria um agendamento
  * atribuído a ele — só chamada quando a própria conta ativou essa opção
  * em Preferências (notif_email_agendamentos), ver agendamentos.js.
+ * Todo texto que veio de usuário (nome do cliente, serviços) passa por
+ * esc() antes de entrar no HTML: sem isso, um cliente chamado
+ * `<a href="...">` injetava links/HTML dentro do e-mail do barbeiro.
  */
 async function enviarEmailNovoAgendamento(event, para, nomeBarbeiro, detalhes) {
   const { clienteNome, dataFormatada, hora, servicos } = detalhes;
   const link = `${urlSite(event)}/sites/agendamentos.html`;
   const html = envelope({
     titulo: `Novo agendamento`,
-    corpoHtml: `<p>Olá, ${nomeBarbeiro}. ${clienteNome} marcou um horário com você para ${dataFormatada} às ${hora} (${servicos}). Está aguardando sua confirmação.</p>`,
+    corpoHtml: `<p>Olá, ${esc(nomeBarbeiro)}. ${esc(clienteNome)} marcou um horário com você para ${esc(dataFormatada)} às ${esc(hora)} (${esc(servicos)}). Está aguardando sua confirmação.</p>`,
     textoBotao: 'Ver agenda',
     linkBotao: link,
   });
@@ -171,8 +179,28 @@ async function enviarEmailNovoAgendamento(event, para, nomeBarbeiro, detalhes) {
   return enviarEmail({ para, assunto: 'Novo agendamento — Barbear Prime', html, texto });
 }
 
+/**
+ * Versão do mesmo aviso voltada para o CLIENTE: confirma que o pedido foi
+ * recebido, com quem, quando e o quê, e explica que ainda depende da
+ * confirmação do barbeiro. Só é enviada se o cliente ativou "Receber
+ * notificações via e-mail de meus agendamentos" em Ajustes.
+ */
+async function enviarEmailAgendamentoCliente(event, para, nomeCliente, detalhes) {
+  const { barbeiroNome, dataFormatada, hora, servicos } = detalhes;
+  const link = `${urlSite(event)}/sites/meus-agendamentos.html`;
+  const html = envelope({
+    titulo: `Recebemos o seu pedido`,
+    corpoHtml: `<p>Olá, ${esc(nomeCliente)}! Seu horário foi pedido com sucesso.</p><p><strong>${esc(dataFormatada)} às ${esc(hora)}</strong><br>Barbeiro: ${esc(barbeiroNome)}<br>Serviços: ${esc(servicos)}</p><p>Ele fica <strong>aguardando a confirmação</strong> do barbeiro. Você pode acompanhar, remarcar ou cancelar pelo botão abaixo.</p>`,
+    textoBotao: 'Ver meus agendamentos',
+    linkBotao: link,
+  });
+  const texto = `Olá, ${nomeCliente}! Recebemos o seu pedido: ${dataFormatada} às ${hora} com ${barbeiroNome} (${servicos}). Ele fica aguardando a confirmação do barbeiro. Acompanhe em: ${link}`;
+  return enviarEmail({ para, assunto: 'Recebemos o seu pedido de horário — Barbear Prime', html, texto });
+}
+
 module.exports = {
   enviarEmailVerificacao,
   enviarEmailRecuperacaoSenha,
   enviarEmailNovoAgendamento,
+  enviarEmailAgendamentoCliente,
 };

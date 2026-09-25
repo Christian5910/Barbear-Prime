@@ -31,6 +31,7 @@ Thumbs.db
 .vscode/
 .idea/
 
+
 # --- Documentação interna sensível --------------------------------------------
 # A pasta MARKDOWN/ documenta, em detalhe, TODAS as vulnerabilidades já
 # encontradas neste projeto — como cada uma funcionava, como foi explorada,
@@ -48,3 +49,9 @@ MARKDOWN/
 # já está ignorada acima — mas DEPLOY.md fica fora de MARKDOWN/, então
 # precisa da própria linha).
 DEPLOY.md
+
+# --- Ferramentas de administração locais --------------------------------------
+# gerar-hash.js cria o hash de senha das contas (por exemplo, a da conta master
+# no reset do banco). É uma ferramenta SÓ sua, para rodar na sua máquina, e não
+# faz parte do site. Fica fora do Git para nunca ser publicada por acidente.
+gerar-hash.js

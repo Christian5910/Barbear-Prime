@@ -376,20 +376,26 @@ function iniciarToggleOfertas() {
 }
 
 /**
- * Toggle "E-mail de novo agendamento" — só existe (e só aparece) pra
- * conta de equipe (ver netlify/functions/agendamentos.js e
- * notificacoes.js: o backend ignora esse campo vindo de uma conta de
- * cliente de qualquer forma, esconder aqui é reforço de UX).
+ * Toggle "E-mail de novo agendamento", disponível para TODAS as contas, com
+ * um texto de cada nível: o barbeiro recebe o aviso de que alguém marcou
+ * horário na agenda dele; o cliente recebe a confirmação do pedido que
+ * acabou de fazer (netlify/functions/agendamentos.js decide quem recebe
+ * o quê; a preferência é guardada em notificacoes.js).
  */
 async function iniciarToggleEmailAgendamentos() {
-  const bloco = document.getElementById('blocoNotifEmailEquipe');
+  const bloco = document.getElementById('blocoNotifEmail');
   const toggle = document.getElementById('notifEmailAgendamentos');
+  const explicacao = document.getElementById('explicacaoNotifEmail');
   if (!bloco || !toggle || !window.db) return;
 
   const sessao = await getSessaoAtual();
-  if (sessao?.papel !== 'equipe') return; // bloco continua display:none
+  if (!sessao) { bloco.classList.add('d-none'); return; }
 
-  bloco.style.display = '';
+  if (explicacao) {
+    explicacao.textContent = sessao.papel === 'equipe'
+      ? 'Manda um e-mail pra você sempre que um cliente marcar um horário na sua agenda, além do aviso dentro do app.'
+      : 'Manda um e-mail de confirmação com dia, horário, barbeiro e serviços sempre que você pedir um horário. Você acompanha o resto pelo app.';
+  }
   window.db.getPreferenciaEmailAgendamentos().then(ativado => {
     toggle.checked = ativado;
   });
@@ -610,6 +616,92 @@ const TAMANHOS_IMAGEM_CDN = {
   banner: { largura: 1600 },                                    // .capa-barbearia: largura total, até 420px de altura
 };
 
+/* ==========================================================================
+   UTILITÁRIOS GERAIS: visibilidade por papel, imagens com falha, rodapé
+   ========================================================================== */
+
+/**
+ * Mostra ou esconde elementos conforme o nível da conta.
+ * Cada elemento declara para quem serve em data-visivel-para
+ * ("cliente" | "equipe" | "master" | "barbeiro-comum"), e `niveis` diz quais
+ * níveis a conta atual tem. Usa a classe d-none do Bootstrap: um
+ * style="display:none" inline NÃO funciona em elementos com d-flex/d-block,
+ * porque essas classes são "display: ... !important" e vencem o inline
+ * (era por isso que botões de barbeiro apareciam para clientes).
+ * data-exibir-como="flex" diz que o elemento, quando visível, é d-flex.
+ */
+function aplicarVisibilidadePorPapel(niveis) {
+  document.querySelectorAll('[data-visivel-para]').forEach((el) => {
+    mostrarElemento(el, Boolean(niveis[el.dataset.visivelPara]));
+  });
+}
+
+/** Só deixa passar uma classe de ícone do Bootstrap ("bi-clock"); qualquer outra coisa vira o ícone padrão. */
+function iconeBootstrapSeguro(classe) {
+  return /^bi-[a-z0-9-]{1,40}$/.test(String(classe || '')) ? classe : 'bi-info-circle';
+}
+
+function mostrarElemento(el, visivel) {
+  if (!el) return;
+  const comoFlex = el.dataset.exibirComo === 'flex';
+  el.classList.toggle('d-none', !visivel);
+  if (comoFlex) el.classList.toggle('d-flex', visivel);
+}
+
+/**
+ * Imagens que falham ao carregar: sem handlers "onerror" escritos no HTML
+ * (a política de segurança do site, em netlify.toml, bloqueia scripts
+ * inline). Em vez disso, um único ouvinte no documento trata todas:
+ *   data-fallback-src="..."   troca pela imagem indicada (uma vez só)
+ *   data-ocultar-em-erro      esconde a imagem
+ */
+function iniciarTratamentoImagensComFalha() {
+  document.addEventListener('error', (ev) => {
+    const img = ev.target;
+    if (!(img instanceof HTMLImageElement)) return;
+    if (img.dataset.fallbackSrc && !img.dataset.fallbackAplicado) {
+      img.dataset.fallbackAplicado = '1';
+      img.src = img.dataset.fallbackSrc;
+    } else if ('ocultarEmErro' in img.dataset) {
+      img.style.display = 'none';
+    }
+  }, true); // erro de <img> não "borbulha": só a fase de captura enxerga
+}
+iniciarTratamentoImagensComFalha();
+
+/** "© 2026" no primeiro ano; "© 2026 - 2027" nos seguintes. Sempre o ano atual, sem editar nada. */
+const ANO_INICIAL_SITE = 2026;
+function textoAnoRodape(anoAtual = new Date().getFullYear()) {
+  return anoAtual > ANO_INICIAL_SITE ? `${ANO_INICIAL_SITE} - ${anoAtual}` : String(ANO_INICIAL_SITE);
+}
+function atualizarAnoRodape() {
+  document.querySelectorAll('[data-ano-rodape]').forEach((el) => { el.textContent = textoAnoRodape(); });
+}
+
+/**
+ * Margem entre o fim do conteúdo e o rodapé fixo, em qualquer tela. O
+ * rodapé (navegação inferior + copyright) tem altura diferente no celular,
+ * no desktop, com fonte grande ou com o texto quebrando em duas linhas.
+ * Em vez de chutar um valor no CSS, medimos a altura real e guardamos em
+ * --altura-rodape (o CSS soma 32px de respiro).
+ */
+function iniciarMargemRodape() {
+  const rodape = document.querySelector('.rodape-fixo');
+  if (!rodape) return;
+  const aplicar = () => {
+    document.documentElement.style.setProperty('--altura-rodape', `${Math.ceil(rodape.getBoundingClientRect().height)}px`);
+  };
+  aplicar();
+  if ('ResizeObserver' in window) new ResizeObserver(aplicar).observe(rodape);
+  window.addEventListener('resize', aplicar);
+  window.addEventListener('load', aplicar);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  atualizarAnoRodape();
+  iniciarMargemRodape();
+});
+
 // Pixel transparente usado como src inicial das imagens que dependem do
 // banco (avatar, capa). Assim nenhuma imagem "de exemplo" aparece por uns
 // instantes antes da imagem verdadeira chegar.
@@ -791,7 +883,7 @@ async function padronizarMenus() {
       rodape.className = 'rodape-fixo';
       rodape.innerHTML = `
         <nav class="nav-inferior" aria-label="Navegação inferior"></nav>
-        <footer class="rodape-site">© 2026 Barbear Prime. Todos os direitos reservados.</footer>
+        <footer class="rodape-site">© <span data-ano-rodape>2026</span> Barbear Prime. Todos os direitos reservados.</footer>
       `;
       shell.appendChild(rodape);
       inferior = rodape.querySelector('.nav-inferior');
@@ -1143,7 +1235,7 @@ async function iniciarGerenciarServicos() {
     }
   });
 
-  form.addEventListener('submit', async (ev) => {
+  form.addEventListener('submit', bpEnvioSeguro(form, async (ev) => {
     ev.preventDefault();
     // Defesa extra: mesmo sem o botão "Novo serviço" nem os botões de
     // editar visíveis, se por algum motivo este formulário for enviado
@@ -1185,7 +1277,7 @@ async function iniciarGerenciarServicos() {
     } else {
       bpReabilitarBotaoEnvio(form);
     }
-  });
+  }));
 
   if (modalEl) {
     modalEl.addEventListener('hidden.bs.modal', abrirParaCriar);
@@ -1318,7 +1410,7 @@ async function iniciarLocalizacao() {
       const classeFormato = bloco.formato === 'circulo' ? ' formato-circulo' : '';
       return `<img src="${escaparHtml(resolverAsset(bloco.icone, undefined, TAMANHOS_IMAGEM_CDN.iconeInfo))}" alt="" class="bloco-info-icone-img${classeFormato}">`;
     }
-    return `<i class="bi ${bloco.iconeBootstrap || 'bi-info-circle'} fs-4 texto-dourado d-block"></i>`;
+    return `<i class="bi ${iconeBootstrapSeguro(bloco.iconeBootstrap)} fs-4 texto-dourado d-block"></i>`;
   }
 
   function renderizarBlocosDisplay(blocos) {
@@ -1365,12 +1457,12 @@ async function iniciarLocalizacao() {
     const linha = document.createElement('div');
     linha.className = 'd-flex align-items-center gap-2';
     linha.dataset.blocoIcone = bloco.icone || '';
-    linha.dataset.blocoIconeBootstrap = bloco.iconeBootstrap || 'bi-info-circle';
+    linha.dataset.blocoIconeBootstrap = iconeBootstrapSeguro(bloco.iconeBootstrap);
     linha.dataset.blocoFormato = bloco.formato === 'circulo' ? 'circulo' : 'quadrado';
     const classeFormatoInicial = linha.dataset.blocoFormato === 'circulo' ? ' formato-circulo' : '';
     linha.innerHTML = `
       <img src="${bloco.icone ? escaparHtml(resolverAsset(bloco.icone, undefined, TAMANHOS_IMAGEM_CDN.iconeInfo)) : ''}" alt="" class="bloco-info-icone-preview${classeFormatoInicial}" data-bloco-preview style="${bloco.icone ? '' : 'display:none;'}">
-      <i class="bi ${bloco.iconeBootstrap || 'bi-info-circle'} fs-4 texto-dourado" data-bloco-preview-padrao style="${bloco.icone ? 'display:none;' : ''}"></i>
+      <i class="bi ${iconeBootstrapSeguro(bloco.iconeBootstrap)} fs-4 texto-dourado" data-bloco-preview-padrao style="${bloco.icone ? 'display:none;' : ''}"></i>
       <input type="text" class="input-prime flex-grow-1" value="${escaparHtml(bloco.texto || '')}" placeholder="Ex.: Aceita cartão" data-bloco-texto>
       <button type="button" class="btn btn-sm btn-outline-secondary px-2" title="Alternar entre quadrado e círculo" data-bloco-alternar-formato>
         <i class="bi ${linha.dataset.blocoFormato === 'circulo' ? 'bi-circle' : 'bi-square'}"></i>
@@ -1458,7 +1550,7 @@ async function iniciarLocalizacao() {
     });
   }
 
-  form.addEventListener('submit', async (ev) => {
+  form.addEventListener('submit', bpEnvioSeguro(form, async (ev) => {
     ev.preventDefault();
 
     // Envia os ícones novos (arquivos escolhidos agora) antes de montar a
@@ -1492,7 +1584,7 @@ async function iniciarLocalizacao() {
     } else {
       bpReabilitarBotaoEnvio(form);
     }
-  });
+  }));
 }
 
 /* ==========================================================================
@@ -1542,12 +1634,23 @@ async function aplicarRotuloLocalidade() {
  * o hero da Home — ver regra ".hero-desktop #capaBarbeariaImg" no CSS,
  * que é mais específica e vence mesmo se a classe estiver presente lá.
  */
+const MODOS_BANNER = ['proporcao', 'recorte', 'tamanho-original', 'padrao'];
+
+/**
+ * Como a capa da Home é exibida (escolha do barbeiro master, salva no banco):
+ *  proporcao         a foto inteira, na proporção dela;
+ *  recorte           o recorte que o master fez, mostrado inteiro;
+ *  tamanho-original  nos pixels reais, centralizada, sem esticar;
+ *  padrao            o formato do capa-barbearia.jpg (1600x1056), com corte central.
+ * O Painel do Barbeiro sempre mostra a foto inteira (é onde se troca a capa).
+ */
 async function aplicarAjusteBanner() {
-  if (!window.db?.getConfig) return;
-  const config = await window.db.getConfig();
-  const manterProporcao = config.banner_barbearia_ajuste === 'original';
-  document.querySelectorAll('.hero-desktop .capa-barbearia').forEach(img => {
-    img.classList.toggle('manter-proporcao', manterProporcao);
+  if (!window.db?.getAjusteBanner) return;
+  let ajuste = 'padrao';
+  try { ajuste = await window.db.getAjusteBanner(); } catch (e) { /* mantém o padrão */ }
+  document.querySelectorAll('.capa-barbearia:not(#capaBarbeariaImg)').forEach((img) => {
+    img.classList.remove('manter-proporcao');
+    MODOS_BANNER.forEach(m => img.classList.toggle(`banner-modo-${m}`, m === ajuste));
   });
 }
 
@@ -1568,59 +1671,153 @@ async function iniciarUploadBanner() {
 
   const modalEl = document.getElementById('modalEscolhaBanner');
   const preview = document.getElementById('previewEscolhaBanner');
-  const btnCortar = document.getElementById('btnBannerCortar');
-  const btnManter = document.getElementById('btnBannerManterProporcao');
+  const info = document.getElementById('infoEscolhaBanner');
+  const opcoes = document.getElementById('opcoesBanner');
+  const LIMITE_BYTES = 2 * 1024 * 1024;
+  // Formato do capa-barbearia.jpg (1600x1056): é o "padrão do site".
+  const PROPORCAO_PADRAO = 1600 / 1056;
+
+  // Estado da foto escolhida. Os botões do modal são ligados UMA vez (antes,
+  // cada nova foto empilhava ouvintes e um clique podia enviar a foto errada).
+  let pendente = null; // { arquivo, dataUrl, largura, altura }
+
+  async function enviar(base64, ajuste) {
+    const ok = await window.db.salvarBannerBarbearia(base64, ajuste);
+    if (ok === false) return;
+    await aplicarBannerSalvo(); // (db.js já mostra o aviso de sucesso)
+  }
+
+  const lerComoDataUrl = (arquivo) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => resolve(ev.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(arquivo);
+  });
+
+  async function escolher(modo) {
+    if (!pendente) return;
+    const { arquivo, dataUrl } = pendente;
+    window.bootstrap?.Modal.getInstance(modalEl)?.hide();
+
+    if (modo === 'padrao') {
+      const recorte = await abrirEditorRecorte(arquivo, { proporcao: PROPORCAO_PADRAO, larguraSaida: 1600, formatoSaida: 'image/jpeg' });
+      if (recorte) await enviar(recorte, 'padrao');
+    } else if (modo === 'recorte') {
+      const recorte = await abrirEditorMargens(arquivo, { larguraMaxSaida: 1600 });
+      if (recorte) await enviar(recorte, 'recorte');
+    } else {
+      // proporcao e tamanho-original sobem a foto do jeito que ela é, então
+      // valem os limites de quem não passa por recorte (6000 px / 24 MP).
+      const seguranca = await verificarImagemSegura(arquivo, { semRecorte: true });
+      if (!seguranca.ok) { mostrarToast(seguranca.motivo, 'erro'); return; }
+      await enviar(dataUrl, modo);
+    }
+  }
+
+  opcoes?.addEventListener('click', (ev) => {
+    const botao = ev.target.closest('[data-banner-modo]');
+    if (botao) escolher(botao.dataset.bannerModo);
+  });
+  modalEl?.addEventListener('hidden.bs.modal', () => { pendente = null; });
 
   btn.addEventListener('click', () => input.click());
 
-  async function confirmarEnvio(base64, ajuste) {
-    await window.db.salvarBannerBarbearia(base64);
-    if (window.db.salvarConfig) await window.db.salvarConfig('banner_barbearia_ajuste', ajuste);
-    await aplicarBannerSalvo();
-  }
-
   input.addEventListener('change', async () => {
     const arquivo = input.files[0];
+    input.value = '';
     if (!arquivo) return;
 
-    if (arquivo.size > 2 * 1024 * 1024) {
+    if (arquivo.size > LIMITE_BYTES) {
       mostrarToast('A imagem deve ter no máximo 2MB.', 'erro');
-      input.value = '';
       return;
     }
+    const seguranca = await verificarImagemSegura(arquivo);
+    if (!seguranca.ok) { mostrarToast(seguranca.motivo, 'erro'); return; }
 
-    // Sem o modal de escolha (markup ausente nesta página), aplica o
-    // recorte padrão direto, sem perguntar.
+    const dataUrl = await lerComoDataUrl(arquivo);
+    pendente = { arquivo, dataUrl, largura: seguranca.largura, altura: seguranca.altura };
+
     if (!modalEl || !window.bootstrap) {
-      const recorte = await abrirEditorRecorte(arquivo, { proporcao: 3, larguraSaida: 1200, formatoSaida: 'image/jpeg' });
-      input.value = '';
-      if (recorte) await confirmarEnvio(recorte, 'cortar');
+      await escolher('padrao'); // sem o modal nesta página: usa o padrão do site
       return;
     }
-
-    const dataUrlOriginal = await new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => resolve(ev.target.result);
-      reader.readAsDataURL(arquivo);
-    });
-    if (preview) preview.src = dataUrlOriginal;
-    const instancia = new window.bootstrap.Modal(modalEl);
-
-    // {once:true} evita empilhar handlers se o barbeiro trocar de foto
-    // mais de uma vez sem recarregar a página.
-    btnCortar?.addEventListener('click', async () => {
-      instancia.hide();
-      const recorte = await abrirEditorRecorte(arquivo, { proporcao: 3, larguraSaida: 1200, formatoSaida: 'image/jpeg' });
-      if (recorte) await confirmarEnvio(recorte, 'cortar');
-    }, { once: true });
-    btnManter?.addEventListener('click', async () => {
-      instancia.hide();
-      await confirmarEnvio(dataUrlOriginal, 'original');
-    }, { once: true });
-
-    instancia.show();
-    input.value = '';
+    if (preview) preview.src = dataUrl;
+    if (info) info.textContent = `Foto escolhida: ${seguranca.largura} x ${seguranca.altura} px`;
+    new window.bootstrap.Modal(modalEl).show();
   });
+}
+
+/* ==========================================================================
+   DESTAQUES DA HOME (a faixa "Desde 2016 ...") — vêm do banco e o master edita
+   ========================================================================== */
+async function iniciarFaixaValores() {
+  const faixa = document.getElementById('faixaValores');
+  if (!faixa || !window.db?.getFaixaValores) return;
+
+  const itensEl = [...faixa.querySelectorAll('.item-valor')];
+  let itens = null;
+  try { itens = await window.db.getFaixaValores(); } catch (e) { itens = null; }
+
+  function preencher(lista) {
+    itensEl.forEach((el, i) => {
+      const dado = lista?.[i];
+      const tit = el.querySelector('[data-faixa-titulo]');
+      const txt = el.querySelector('[data-faixa-texto]');
+      const existe = Boolean(dado?.titulo);
+      el.classList.toggle('d-none', !existe);
+      if (existe) {
+        preencherTextoCarregado(tit, dado.titulo);
+        preencherTextoCarregado(txt, dado.texto || '');
+        tit.classList.remove('d-block', 'mx-auto');
+        txt.classList.toggle('d-none', !dado.texto);
+      }
+    });
+    // Sem nenhum destaque cadastrado: a faixa some (na Home); no Painel
+    // continua visível para o master poder cadastrar.
+    const algum = (lista || []).some(d => d?.titulo);
+    if (!algum && !document.getElementById('btnEditarFaixa')) faixa.classList.add('d-none');
+  }
+  preencher(itens);
+
+  // ---- edição (só master, no Painel do Barbeiro)
+  const btnEditar = document.getElementById('btnEditarFaixa');
+  const form = document.getElementById('formFaixa');
+  const campos = document.getElementById('camposFaixa');
+  if (!btnEditar || !form || !campos) return;
+  const sessao = await getSessaoAtual();
+  if (!sessao?.master) return; // continua d-none
+  mostrarElemento(btnEditar, true);
+
+  const ICONES = ['bi-award', 'bi-scissors', 'bi-star'];
+  function montarCampos() {
+    campos.innerHTML = itensEl.map((_, i) => `
+      <div class="mb-3 pb-2 border-bottom">
+        <p class="small fw-bold mb-2"><i class="bi ${ICONES[i]} me-1"></i> Destaque ${i + 1}</p>
+        <label class="form-label small" for="faixaTitulo${i}">Título</label>
+        <input type="text" class="input-prime mb-2" id="faixaTitulo${i}" maxlength="40" value="${escaparHtml(itens?.[i]?.titulo || '')}">
+        <label class="form-label small" for="faixaTexto${i}">Descrição</label>
+        <input type="text" class="input-prime" id="faixaTexto${i}" maxlength="90" value="${escaparHtml(itens?.[i]?.texto || '')}">
+      </div>`).join('');
+  }
+  document.getElementById('modalFaixa')?.addEventListener('show.bs.modal', montarCampos);
+
+  form.addEventListener('submit', bpEnvioSeguro(form, async (ev) => {
+    ev.preventDefault();
+    const novos = itensEl.map((_, i) => ({
+      titulo: document.getElementById(`faixaTitulo${i}`).value.trim(),
+      texto: document.getElementById(`faixaTexto${i}`).value.trim(),
+    })).filter(d => d.titulo);
+    if (!novos.length) {
+      mostrarToast('Preencha pelo menos um título.', 'erro');
+      return;
+    }
+    const ok = await window.db.salvarFaixaValores(novos);
+    if (ok === false) return;
+    itens = novos;
+    preencher(novos);
+    window.bootstrap?.Modal.getInstance(document.getElementById('modalFaixa'))?.hide();
+    mostrarToast('Destaques atualizados.', 'sucesso');
+  }));
 }
 
 /* ==========================================================================
@@ -1885,6 +2082,184 @@ function iniciarSalvarPreferenciasCorte() {
  *     (ícones simples, preserva transparência se houver)
  * @returns {Promise<string|null>} dataURL do recorte, ou null se cancelado
  */
+/* ==========================================================================
+   IMAGENS ENVIADAS PELO USUÁRIO: conferência ANTES de decodificar
+   ========================================================================== */
+// Um arquivo pequeno pode declarar dimensões enormes (uma "bomba de
+// descompressão": poucos KB que viram gigabytes de pixels ao abrir). Ler o
+// cabeçalho é barato e seguro; decodificar não é. Por isso lemos largura e
+// altura direto dos primeiros bytes e recusamos ANTES de criar a imagem ou
+// o canvas. O servidor repete a mesma conferência (netlify/functions/_lib/imagem.js).
+const LIMITE_LADO_ENTRADA = 12000;             // px
+const LIMITE_PIXELS_ENTRADA = 64 * 1000 * 1000; // 64 megapixels
+const LIMITE_LADO_SEM_RECORTE = 6000;          // mesma regra do servidor
+const LIMITE_PIXELS_SEM_RECORTE = 24 * 1000 * 1000;
+
+function lerDimensoesDoCabecalho(b) {
+  const u16 = (i) => (b[i] << 8) | b[i + 1];
+  const u32 = (i) => ((b[i] << 24) | (b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3]) >>> 0;
+  const le16 = (i) => b[i] | (b[i + 1] << 8);
+  const txt = (i, n) => String.fromCharCode(...b.slice(i, i + n));
+  if (b.length >= 24 && b[0] === 0x89 && txt(1, 3) === 'PNG') return { w: u32(16), h: u32(20) };
+  if (b.length >= 10 && txt(0, 3) === 'GIF') return { w: le16(6), h: le16(8) };
+  if (b.length >= 30 && txt(0, 4) === 'RIFF' && txt(8, 4) === 'WEBP') {
+    const tipo = txt(12, 4);
+    if (tipo === 'VP8 ') return { w: le16(26) & 0x3fff, h: le16(28) & 0x3fff };
+    if (tipo === 'VP8L') { const v = (b[21] | (b[22] << 8) | (b[23] << 16) | (b[24] << 24)) >>> 0; return { w: (v & 0x3fff) + 1, h: ((v >>> 14) & 0x3fff) + 1 }; }
+    if (tipo === 'VP8X') return { w: (b[24] | (b[25] << 8) | (b[26] << 16)) + 1, h: (b[27] | (b[28] << 8) | (b[29] << 16)) + 1 };
+  }
+  if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) return null;
+      const m = b[i + 1];
+      if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { h: u16(i + 5), w: u16(i + 7) };
+      if (m === 0xd8 || (m >= 0xd0 && m <= 0xd7) || m === 0x01) { i += 2; continue; }
+      i += 2 + u16(i + 2);
+    }
+  }
+  return null;
+}
+
+/**
+ * Confere se o arquivo é uma imagem de tipo aceito e de tamanho razoável.
+ * Devolve { ok:true, largura, altura } ou { ok:false, motivo }.
+ * `semRecorte` usa o limite do servidor (imagem que sobe do jeito que está).
+ */
+async function verificarImagemSegura(arquivo, { semRecorte = false } = {}) {
+  if (!arquivo || !/^image\/(png|jpeg|webp|gif)$/.test(arquivo.type)) {
+    return { ok: false, motivo: 'Use uma imagem PNG, JPG, WEBP ou GIF.' };
+  }
+  const bytes = new Uint8Array(await arquivo.slice(0, 256 * 1024).arrayBuffer());
+  const dim = lerDimensoesDoCabecalho(bytes);
+  if (!dim || !dim.w || !dim.h) return { ok: false, motivo: 'Não foi possível ler essa imagem. Ela pode estar corrompida.' };
+  const maxLado = semRecorte ? LIMITE_LADO_SEM_RECORTE : LIMITE_LADO_ENTRADA;
+  const maxPixels = semRecorte ? LIMITE_PIXELS_SEM_RECORTE : LIMITE_PIXELS_ENTRADA;
+  if (dim.w > maxLado || dim.h > maxLado || dim.w * dim.h > maxPixels) {
+    return {
+      ok: false,
+      motivo: `A imagem é grande demais (${dim.w}x${dim.h}). ${semRecorte ? 'Para usá-la sem recortar, reduza para no máximo 6000 px de lado.' : 'Reduza o tamanho e tente de novo.'}`,
+    };
+  }
+  return { ok: true, largura: dim.w, altura: dim.h };
+}
+
+/**
+ * Editor de corte por MARGENS: quatro controles (esquerda, direita, topo e
+ * base, em %) mostram em tempo real o que será cortado. Devolve a imagem já
+ * recortada (data URL JPEG) ou null se cancelar.
+ */
+function abrirEditorMargens(arquivo, { larguraMaxSaida = 1600 } = {}) {
+  return new Promise(async (resolve) => {
+    const seguranca = await verificarImagemSegura(arquivo);
+    if (!seguranca.ok) { mostrarToast(seguranca.motivo, 'erro'); resolve(null); return; }
+
+    const modalEl = document.createElement('div');
+    modalEl.className = 'modal fade';
+    modalEl.tabIndex = -1;
+    modalEl.setAttribute('aria-hidden', 'true');
+    modalEl.innerHTML = `
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content modal-prime">
+          <div class="modal-header">
+            <h2 class="modal-title fs-5 fonte-display">Cortar como eu quiser</h2>
+            <button type="button" class="btn-close" aria-label="Fechar" data-margens-cancelar></button>
+          </div>
+          <div class="modal-body">
+            <div class="position-relative mb-3" style="line-height:0;" data-margens-area>
+              <img alt="Prévia do corte" style="width:100%;max-height:45vh;object-fit:contain;display:block;background:#000;border-radius:var(--raio);">
+              <div data-margens-sombras aria-hidden="true"></div>
+            </div>
+            ${[['esq', 'Esquerda'], ['dir', 'Direita'], ['topo', 'Topo'], ['base', 'Base']].map(([k, nome]) => `
+              <div class="d-flex align-items-center gap-2 mb-1">
+                <label class="small" style="width:70px;" for="margem-${k}">${nome}</label>
+                <input type="range" class="form-range flex-grow-1" id="margem-${k}" data-margem="${k}" min="0" max="45" step="1" value="0">
+                <output class="small texto-suave" style="width:36px;text-align:right;" data-saida="${k}">0%</output>
+              </div>`).join('')}
+            <p class="texto-suave small mt-2 mb-0">A parte escurecida será cortada. A imagem final fica no formato do que sobrar.</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-margens-cancelar>Cancelar</button>
+            <button type="button" class="btn-prime" data-margens-confirmar>Usar este corte</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modalEl);
+
+    const img = modalEl.querySelector('img');
+    const sombras = modalEl.querySelector('[data-margens-sombras]');
+    const margens = { esq: 0, dir: 0, topo: 0, base: 0 };
+    const instancia = window.bootstrap ? new window.bootstrap.Modal(modalEl, { backdrop: 'static' }) : null;
+    let carregada = false;
+    let resultadoPendente = null;
+
+    function areaImagem() {
+      // a imagem usa object-fit: contain; a área útil é a caixa real da imagem dentro do elemento
+      const caixa = img.getBoundingClientRect();
+      const proporcaoImg = img.naturalWidth / img.naturalHeight;
+      let w = caixa.width;
+      let h = caixa.height;
+      if (w / h > proporcaoImg) w = h * proporcaoImg; else h = w / proporcaoImg;
+      return { x: (caixa.width - w) / 2, y: (caixa.height - h) / 2, w, h };
+    }
+    function desenharSombras() {
+      if (!carregada) return;
+      const a = areaImagem();
+      const barra = (estilo) => `<div style="position:absolute;background:rgba(0,0,0,.62);pointer-events:none;${estilo}"></div>`;
+      const l = a.w * margens.esq / 100, r = a.w * margens.dir / 100, t = a.h * margens.topo / 100, b = a.h * margens.base / 100;
+      sombras.innerHTML =
+        barra(`left:${a.x}px;top:${a.y}px;width:${a.w}px;height:${t}px;`) +
+        barra(`left:${a.x}px;top:${a.y + a.h - b}px;width:${a.w}px;height:${b}px;`) +
+        barra(`left:${a.x}px;top:${a.y + t}px;width:${l}px;height:${a.h - t - b}px;`) +
+        barra(`left:${a.x + a.w - r}px;top:${a.y + t}px;width:${r}px;height:${a.h - t - b}px;`);
+    }
+
+    modalEl.querySelectorAll('[data-margem]').forEach((campo) => {
+      campo.addEventListener('input', () => {
+        const chave = campo.dataset.margem;
+        let valor = Number(campo.value);
+        // sempre sobra pelo menos 10% de largura e de altura
+        const oposta = { esq: 'dir', dir: 'esq', topo: 'base', base: 'topo' }[chave];
+        valor = Math.min(valor, 90 - margens[oposta]);
+        campo.value = String(valor);
+        margens[chave] = valor;
+        modalEl.querySelector(`[data-saida="${chave}"]`).textContent = `${valor}%`;
+        desenharSombras();
+      });
+    });
+
+    img.onload = () => { carregada = true; desenharSombras(); };
+    img.onerror = () => { mostrarToast('Não foi possível abrir essa imagem.', 'erro'); if (instancia) instancia.hide(); else { modalEl.remove(); resolve(null); } };
+    img.src = URL.createObjectURL(arquivo);
+    window.addEventListener('resize', desenharSombras);
+
+    modalEl.addEventListener('hidden.bs.modal', () => {
+      window.removeEventListener('resize', desenharSombras);
+      URL.revokeObjectURL(img.src);
+      modalEl.remove();
+      resolve(resultadoPendente);
+    });
+
+    modalEl.querySelectorAll('[data-margens-cancelar]').forEach(b => b.addEventListener('click', () => { resultadoPendente = null; instancia?.hide(); }));
+    modalEl.querySelector('[data-margens-confirmar]').addEventListener('click', () => {
+      if (!carregada) return;
+      const sx = Math.round(img.naturalWidth * margens.esq / 100);
+      const sy = Math.round(img.naturalHeight * margens.topo / 100);
+      const sw = Math.max(1, Math.round(img.naturalWidth * (100 - margens.esq - margens.dir) / 100));
+      const sh = Math.max(1, Math.round(img.naturalHeight * (100 - margens.topo - margens.base) / 100));
+      const escala = Math.min(1, larguraMaxSaida / sw);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(sw * escala));
+      canvas.height = Math.max(1, Math.round(sh * escala));
+      canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      resultadoPendente = canvas.toDataURL('image/jpeg', 0.9);
+      instancia?.hide();
+    });
+
+    if (instancia) instancia.show(); else modalEl.classList.add('show');
+  });
+}
+
 function abrirEditorRecorte(arquivo, opcoes = {}) {
   const {
     proporcao = 1,
@@ -1894,7 +2269,9 @@ function abrirEditorRecorte(arquivo, opcoes = {}) {
   } = opcoes;
   const alturaSaida = Math.round(larguraSaida / proporcao);
 
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
+    const seguranca = await verificarImagemSegura(arquivo);
+    if (!seguranca.ok) { mostrarToast(seguranca.motivo, 'erro'); resolve(null); return; }
     const larguraViewport = Math.round(Math.min(320, window.innerWidth - 64));
     const alturaViewport = Math.round(larguraViewport / proporcao);
 
@@ -2122,21 +2499,24 @@ async function carregarDadosPerfil() {
   if (emailEdit) emailEdit.value = sessao.email;
   if (avatarEdit) {
     trocarImagemQuandoPronta(avatarEdit, resolverAsset(sessao.avatar, undefined, TAMANHOS_IMAGEM_CDN.avatarPerfil));
-    avatarEdit.dataset.base64 = sessao.avatar || '';
+    avatarEdit.dataset.base64 = ''; // só vira data URL quando o usuário escolhe uma foto NOVA
   }
 
-  // O perfil é a mesma página para cliente e equipe (o Painel do Barbeiro
-  // linka pra cá) — "Próximo agendamento", "Preferências de Corte" e "Meus
-  // Agendamentos" só fazem sentido pra quem agenda um corte pra si mesmo.
+  // O perfil é UMA página só, com seções por nível de conta (cliente,
+  // barbeiro comum e barbeiro master). O nível vem da sessão que o servidor
+  // acabou de confirmar; esconder/mostrar aqui é organização da tela. Quem
+  // impede de verdade um cliente de criar barbeiro, ou um barbeiro comum de
+  // mudar o endereço, é o servidor (403 em auth-cadastro.js, config.js,
+  // equipe.js...), mesmo que alguém reative os botões pelo navegador.
   const ehEquipe = sessao.papel === 'equipe';
-  // Hierarquia dentro da equipe: só o barbeiro MASTER convida colega novo
-  // e edita endereço/localização — um barbeiro comum só mexe na própria
-  // agenda (ver netlify/functions/auth-cadastro.js, config.js — a mesma
-  // regra é reforçada lá; esconder o botão aqui é só conveniência de UX).
   const ehMaster = ehEquipe && Boolean(sessao.master);
-  if (acoesCliente) acoesCliente.style.display = ehEquipe ? 'none' : '';
-  if (acoesEquipe) acoesEquipe.style.display = ehEquipe ? '' : 'none';
-  if (proximoCard) proximoCard.style.display = ehEquipe ? 'none' : '';
+  const ehBarbeiroComum = ehEquipe && !sessao.master;
+  aplicarVisibilidadePorPapel({
+    cliente: !ehEquipe,
+    equipe: ehEquipe,
+    master: ehMaster,
+    'barbeiro-comum': ehBarbeiroComum,
+  });
 
   if (proximoDisplay && !ehEquipe) {
     const proximo = await window.db.getProximoAgendamento(sessao.usuarioId);
@@ -2145,34 +2525,103 @@ async function carregarDadosPerfil() {
       : 'Nenhum agendamento futuro.';
   }
 
-  const btnCriarBarbeiro = document.getElementById('btnCriarContaBarbeiro');
-  if (btnCriarBarbeiro) {
-    btnCriarBarbeiro.style.display = ehMaster ? '' : 'none';
-  }
-  const linkAlterarLocalizacao = document.getElementById('linkAlterarLocalizacao');
-  if (linkAlterarLocalizacao) {
-    linkAlterarLocalizacao.style.display = ehMaster ? '' : 'none';
+  if (ehEquipe && document.getElementById('cartaoEquipe') !== null) {
+    iniciarAreaEquipeNoPerfil(sessao);
   }
   // A conta master nunca pode ser excluída (netlify/functions/usuarios.js
   // recusa mesmo se alguém chamar a API direto) — esconder o botão evita
   // mostrar uma ação que vai sempre falhar com erro.
   const btnExcluirConta = document.getElementById('btnExcluirConta');
   if (btnExcluirConta) {
-    btnExcluirConta.style.display = sessao.master ? 'none' : '';
+    btnExcluirConta.style.display = sessao.masterRaiz ? 'none' : '';
   }
 }
 
+/* ==========================================================================
+   EQUIPE: criar barbeiros, pedir/decidir permissões (aba Perfil)
+   ========================================================================== */
+
 /**
- * Formulário "Criar conta de barbeiro" (aba Perfil, só visível para quem
- * já está logado como equipe). Reaproveita cadastrarUsuario com
- * papel 'equipe' — a nova conta passa a aparecer automaticamente na
- * lista de barbeiros selecionáveis no agendamento.
+ * Formulário "Criar conta de barbeiro". Três situações:
+ *  - master: escolhe entre barbeiro comum (padrão) e master. Um "?" abre um
+ *    pop-up dentro do pop-up explicando a diferença. Escolher master abre um
+ *    aviso de riscos OBRIGATÓRIO (é preciso marcar que entendeu) antes de
+ *    a conta ser criada;
+ *  - barbeiro comum com permissão: só cria barbeiro comum (sem escolha);
+ *  - qualquer outro: o botão nem aparece (e o servidor recusaria).
  */
 function iniciarCriarContaBarbeiro() {
   const form = document.getElementById('formCriarBarbeiro');
   if (!form || !window.db) return;
 
   const modalEl = document.getElementById('modalCriarBarbeiro');
+  const popupAjuda = document.getElementById('popupExplicaTipos');
+  const popupRisco = document.getElementById('popupRiscoMaster');
+  const checkRisco = document.getElementById('checkRiscoMaster');
+  const btnConfirmarRisco = document.getElementById('btnConfirmarRiscoMaster');
+  const btnCancelarRisco = document.getElementById('btnCancelarRiscoMaster');
+  const grupoTipo = document.getElementById('grupoTipoBarbeiro');
+  const avisoSoComum = document.getElementById('avisoSoBarbeiroComum');
+
+  const abrirPopup = (popup, focoEm) => {
+    popup.hidden = false;
+    (focoEm || popup.querySelector('button'))?.focus();
+  };
+  const fecharPopup = (popup) => { popup.hidden = true; };
+
+  document.getElementById('btnAjudaTipos')?.addEventListener('click', () => abrirPopup(popupAjuda, document.getElementById('btnFecharAjudaTipos')));
+  document.getElementById('btnFecharAjudaTipos')?.addEventListener('click', () => fecharPopup(popupAjuda));
+
+  // Aviso de risco: o botão de criar só habilita depois de marcar a caixa.
+  checkRisco?.addEventListener('change', () => { btnConfirmarRisco.disabled = !checkRisco.checked; });
+  btnCancelarRisco?.addEventListener('click', () => {
+    fecharPopup(popupRisco);
+    checkRisco.checked = false;
+    btnConfirmarRisco.disabled = true;
+  });
+
+  // Esc fecha o pop-up interno aberto (sem fechar o modal de baixo). No aviso
+  // de risco, Esc equivale a "Voltar": cancela, nunca confirma.
+  modalEl.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    const aberto = [popupRisco, popupAjuda].find(p => p && !p.hidden);
+    if (!aberto) return;
+    ev.stopPropagation();
+    ev.preventDefault();
+    if (aberto === popupRisco) btnCancelarRisco.click(); else fecharPopup(aberto);
+  }, true);
+
+  // Ao abrir o modal, mostra só as opções que a conta pode usar.
+  modalEl.addEventListener('show.bs.modal', async () => {
+    const sessao = await getSessaoAtual();
+    const ehMaster = Boolean(sessao?.master);
+    mostrarElemento(grupoTipo, ehMaster);
+    mostrarElemento(avisoSoComum, !ehMaster);
+    const comum = form.querySelector('input[name="tipoBarbeiro"][value="comum"]');
+    if (comum) comum.checked = true; // sempre começa no padrão seguro
+  });
+  modalEl.addEventListener('hidden.bs.modal', () => {
+    fecharPopup(popupAjuda);
+    fecharPopup(popupRisco);
+    if (checkRisco) { checkRisco.checked = false; btnConfirmarRisco.disabled = true; }
+    form.reset();
+    bpReabilitarBotaoEnvio(form);
+  });
+
+  async function criar(master) {
+    const nome = document.getElementById('novoBarbeiroNome').value.trim();
+    const email = document.getElementById('novoBarbeiroEmail').value.trim();
+    const senha = document.getElementById('novoBarbeiroSenha').value;
+    const criado = await window.db.criarBarbeiro(nome, email, senha, { master, confirmarRiscoMaster: master });
+    if (!criado) return false;
+    window.bootstrap?.Modal.getInstance(modalEl)?.hide();
+    const primeiroNome = nome.split(' ')[0];
+    mostrarToast(master
+      ? `Conta master de ${primeiroNome} criada. Ela já pode entrar com a senha combinada.`
+      : `Conta de ${primeiroNome} criada. Ela já pode entrar com a senha combinada.`, 'sucesso');
+    document.dispatchEvent(new CustomEvent('bp:equipe-alterada'));
+    return true;
+  }
 
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -2182,23 +2631,189 @@ function iniciarCriarContaBarbeiro() {
 
     if (!nome || !email || senha.length < 6) {
       mostrarToast('Preencha nome, e-mail e uma senha com pelo menos 6 caracteres.', 'erro');
-      bpReabilitarBotaoEnvio(form);
       return;
     }
+    const querMaster = form.querySelector('input[name="tipoBarbeiro"]:checked')?.value === 'master'
+      && !grupoTipo.classList.contains('d-none');
 
-    const criado = await window.db.cadastrarUsuario(nome, email, senha, 'equipe');
-    if (criado) {
-      form.reset();
-      const instancia = window.bootstrap?.Modal.getInstance(modalEl);
-      if (instancia) instancia.hide();
-      // A conta só fica utilizável depois que o próprio colega confirmar
-      // o e-mail dele (ver auth-cadastro.js) — por isso o aviso é sobre
-      // avisar o colega, não "conta criada e pronta pra usar".
-      mostrarToast(`Conta de ${nome.split(' ')[0]} criada — já pode entrar com a senha combinada.`, 'sucesso');
-    } else {
+    if (querMaster) {
+      // Aviso obrigatório: a conta só é criada depois do "Criar master" do pop-up.
       bpReabilitarBotaoEnvio(form);
+      abrirPopup(popupRisco, checkRisco);
+      return;
+    }
+    await criar(false);
+  });
+
+  btnConfirmarRisco?.addEventListener('click', async () => {
+    if (!checkRisco.checked) return; // o botão já nasce desabilitado; conferência extra
+    btnConfirmarRisco.disabled = true;
+    try {
+      const ok = await criar(true);
+      if (!ok) { btnConfirmarRisco.disabled = !checkRisco.checked; }
+    } finally {
+      fecharPopup(popupRisco);
+      checkRisco.checked = false;
     }
   });
+}
+
+/**
+ * Área de equipe do Perfil:
+ *  - barbeiro comum: vê se pode criar barbeiros; se não pode, pede a um master;
+ *  - master: aprova/nega pedidos, liga/desliga a permissão de cada barbeiro
+ *    comum e (só o master principal) rebaixa outro master.
+ */
+async function iniciarAreaEquipeNoPerfil(sessao) {
+  const btnCriar = document.getElementById('btnCriarContaBarbeiro');
+
+  if (sessao.master) {
+    mostrarElemento(btnCriar, true);
+    await renderizarEquipeMaster(sessao);
+    document.addEventListener('bp:equipe-alterada', () => renderizarEquipeMaster(sessao));
+    return;
+  }
+
+  // Barbeiro comum
+  const texto = document.getElementById('textoPermissaoBarbeiro');
+  const btnPedir = document.getElementById('btnSolicitarPermissao');
+
+  async function atualizar() {
+    const info = await window.db.getMinhaPermissaoEquipe();
+    if (!info) { if (texto) texto.textContent = 'Não foi possível verificar agora.'; return; }
+    const pode = Boolean(info.podeCriarBarbeiros);
+    mostrarElemento(btnCriar, pode);
+    if (pode) {
+      texto.textContent = 'Um master liberou você para criar contas de barbeiro comum.';
+      btnPedir.classList.add('d-none');
+    } else if (info.solicitacao?.status === 'pendente') {
+      texto.textContent = 'Pedido enviado. Aguardando um master responder.';
+      btnPedir.classList.add('d-none');
+    } else {
+      texto.textContent = info.solicitacao?.status === 'negada'
+        ? 'Seu último pedido foi negado. Você pode pedir de novo.'
+        : 'Você ainda não pode criar contas de barbeiro. Peça a um master.';
+      btnPedir.classList.remove('d-none');
+    }
+  }
+  btnPedir?.addEventListener('click', async () => {
+    btnPedir.disabled = true;
+    const ok = await window.db.solicitarPermissaoCriarBarbeiro();
+    btnPedir.disabled = false;
+    if (ok) mostrarToast('Pedido enviado aos barbeiros master.', 'sucesso');
+    await atualizar();
+  });
+  await atualizar();
+}
+
+async function renderizarEquipeMaster(sessao) {
+  const listaPedidos = document.getElementById('listaPedidosEquipe');
+  const listaMembros = document.getElementById('listaMembrosEquipe');
+  const selo = document.getElementById('seloPedidosEquipe');
+  if (!listaPedidos || !listaMembros) return;
+
+  const dados = await window.db.getEquipe();
+  if (!dados) {
+    listaMembros.innerHTML = '<p class="small texto-suave mb-0">Não foi possível carregar a equipe agora.</p>';
+    return;
+  }
+
+  const pedidos = dados.solicitacoes || [];
+  if (selo) {
+    selo.textContent = String(pedidos.length);
+    selo.classList.toggle('d-none', pedidos.length === 0);
+  }
+  listaPedidos.innerHTML = pedidos.length
+    ? pedidos.map(p => `
+        <div class="d-flex align-items-center gap-2 py-2 border-bottom" data-pedido-id="${escaparHtml(p.id)}">
+          <div class="flex-grow-1 small"><strong>${escaparHtml(p.nome)}</strong> quer poder criar barbeiros comuns.</div>
+          <button type="button" class="btn btn-sm btn-prime" data-decisao="aprovar">Aprovar</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-decisao="negar">Negar</button>
+        </div>`).join('')
+    : '<p class="small texto-suave mb-0">Nenhum pedido aguardando resposta.</p>';
+
+  const euSouRaiz = Boolean(sessao.masterRaiz);
+  listaMembros.innerHTML = (dados.membros || []).map((m) => {
+    const ehEu = String(m.id) === String(sessao.usuarioId);
+    const etiqueta = m.masterRaiz ? 'Master principal' : (m.master ? 'Master' : 'Barbeiro');
+    let acao = '';
+    if (!m.master) {
+      acao = `<div class="form-check form-switch m-0" title="Pode criar barbeiros comuns">
+          <input class="form-check-input" type="checkbox" data-permissao-de="${escaparHtml(m.id)}" ${m.podeCriarBarbeiros ? 'checked' : ''} aria-label="${escaparHtml(m.nome)} pode criar barbeiros">
+        </div>`;
+    } else if (euSouRaiz && !m.masterRaiz && !ehEu) {
+      acao = `<button type="button" class="btn btn-sm btn-outline-danger" data-rebaixar="${escaparHtml(m.id)}">Rebaixar</button>`;
+    }
+    return `<div class="d-flex align-items-center gap-2 py-2 border-bottom">
+        <div class="flex-grow-1 small"><strong>${escaparHtml(m.nome)}</strong>${ehEu ? ' (você)' : ''}<br><span class="texto-suave">${etiqueta}${!m.master && m.podeCriarBarbeiros ? ' · pode criar barbeiros' : ''}</span></div>
+        ${acao}
+      </div>`;
+  }).join('');
+
+  // Um único ouvinte por painel (o painel é redesenhado, os ouvintes ficam no contêiner).
+  const cartao = document.getElementById('cartaoEquipe');
+  if (cartao && !cartao.dataset.ouvintes) {
+    cartao.dataset.ouvintes = '1';
+    cartao.addEventListener('click', async (ev) => {
+      const btnDecisao = ev.target.closest('[data-decisao]');
+      if (btnDecisao) {
+        const id = btnDecisao.closest('[data-pedido-id]').dataset.pedidoId;
+        btnDecisao.disabled = true;
+        const ok = await window.db.decidirSolicitacaoBarbeiro(id, btnDecisao.dataset.decisao);
+        if (ok) mostrarToast(btnDecisao.dataset.decisao === 'aprovar' ? 'Permissão concedida.' : 'Pedido negado.', 'sucesso');
+        await renderizarEquipeMaster(sessao);
+        return;
+      }
+      const btnRebaixar = ev.target.closest('[data-rebaixar]');
+      if (btnRebaixar) {
+        if (!window.confirm('Rebaixar este master para barbeiro comum? Ele perde o acesso de master imediatamente.')) return;
+        const ok = await window.db.rebaixarMaster(btnRebaixar.dataset.rebaixar);
+        if (ok) mostrarToast('Master rebaixado para barbeiro comum.', 'sucesso');
+        await renderizarEquipeMaster(sessao);
+      }
+    });
+    cartao.addEventListener('change', async (ev) => {
+      const chk = ev.target.closest('[data-permissao-de]');
+      if (!chk) return;
+      const ok = await window.db.definirPermissaoCriarBarbeiros(chk.dataset.permissaoDe, chk.checked);
+      if (ok) mostrarToast(chk.checked ? 'Permissão concedida.' : 'Permissão removida.', 'sucesso');
+      await renderizarEquipeMaster(sessao);
+    });
+  }
+}
+
+/**
+ * Aviso de pedidos novos para os barbeiros MASTER, em qualquer página do
+ * site: confere a cada minuto (só com a aba visível) e avisa com um toast
+ * e, se o navegador permitir, uma notificação do sistema. Avisa uma vez por
+ * quantidade de pedidos (não repete o mesmo aviso a cada minuto).
+ */
+async function iniciarAvisoPedidosEquipe() {
+  if (!window.db?.getPedidosPendentesEquipe) return;
+  const sessao = await getSessaoAtual();
+  if (!sessao?.master) return;
+
+  let ultimoAvisado = Number(sessionStorage.getItem('bp-pedidos-avisados') || 0);
+
+  async function conferir() {
+    if (document.hidden) return;
+    const pendentes = await window.db.getPedidosPendentesEquipe();
+    if (pendentes > ultimoAvisado) {
+      const texto = pendentes === 1
+        ? 'Um barbeiro pediu permissão para criar contas. Veja no seu Perfil.'
+        : `${pendentes} barbeiros pediram permissão para criar contas. Veja no seu Perfil.`;
+      mostrarToast(texto, 'sucesso');
+      try {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Barbear Prime', { body: texto });
+        }
+      } catch (e) { /* notificação do sistema é um extra; o toast já avisou */ }
+    }
+    ultimoAvisado = pendentes;
+    sessionStorage.setItem('bp-pedidos-avisados', String(pendentes));
+  }
+  conferir();
+  setInterval(conferir, 60 * 1000);
 }
 
 /* ==========================================================================
@@ -2475,12 +3090,25 @@ async function iniciarAgendamentosCliente() {
   }
 
   async function renderizar() {
+    try {
+      await renderizarInterno();
+    } catch (e) {
+      // Sem isso, um erro de rede deixava a tela presa nos esqueletos de carregamento.
+      console.error(e);
+      abas.innerHTML = '';
+      abas.removeAttribute('aria-busy');
+      lista.innerHTML = listaVazia('Não foi possível carregar seus agendamentos agora. Tente novamente em instantes.');
+    }
+  }
+
+  async function renderizarInterno() {
     const agora = new Date();
     const agendamentos = await window.db.getAgendamentosDoUsuario(sessao.usuarioId);
     const futuros = agendamentos.filter(item => item.status !== 'cancelado' && new Date(`${item.data}T${item.hora}:00`) >= agora);
     const pendentes = agendamentos.filter(item => item.status === 'pendente');
     const historico = agendamentos.filter(item => item.status === 'cancelado' || new Date(`${item.data}T${item.hora}:00`) < agora);
 
+    abas.removeAttribute('aria-busy');
     abas.innerHTML = `
       <li class="nav-item"><button class="nav-link active" data-aba="futuros">Futuros</button></li>
       <li class="nav-item"><button class="nav-link" data-aba="pendentes">Pendentes</button></li>
@@ -2767,7 +3395,7 @@ function iniciarAgendaBarbeiro() {
   }
 
   if (formNovo) {
-    formNovo.addEventListener('submit', async (ev) => {
+    formNovo.addEventListener('submit', bpEnvioSeguro(formNovo, async (ev) => {
       ev.preventDefault();
       const nome = document.getElementById('novoAgendamentoCliente').value.trim();
       const servicoIds = getServicosMarcados(checklistServicos);
@@ -2798,7 +3426,7 @@ function iniciarAgendaBarbeiro() {
       } else {
         bpReabilitarBotaoEnvio(formNovo);
       }
-    });
+    }));
   }
 
   /* ------------------------------ Modal: remarcar ---------------------------------- */
@@ -2826,7 +3454,7 @@ function iniciarAgendaBarbeiro() {
     inputRemarcarData.addEventListener('change', () => preencherHorarios(selectRemarcarHora, inputRemarcarData.value, remarcarServicoIds));
   }
   if (formRemarcar) {
-    formRemarcar.addEventListener('submit', async (ev) => {
+    formRemarcar.addEventListener('submit', bpEnvioSeguro(formRemarcar, async (ev) => {
       ev.preventDefault();
       const id = inputRemarcarId.value;
       const novaData = inputRemarcarData.value;
@@ -2840,7 +3468,7 @@ function iniciarAgendaBarbeiro() {
       } else {
         bpReabilitarBotaoEnvio(formRemarcar);
       }
-    });
+    }));
   }
 
   /* ------------------------- Dia de folga / bloquear horário ------------------------- */
@@ -2911,7 +3539,7 @@ function iniciarAgendaBarbeiro() {
   }
 
   if (formFolga) {
-    formFolga.addEventListener('submit', async (ev) => {
+    formFolga.addEventListener('submit', bpEnvioSeguro(formFolga, async (ev) => {
       ev.preventDefault();
       const data = inputFolgaData.value;
       if (!data) {
@@ -2937,7 +3565,7 @@ function iniciarAgendaBarbeiro() {
       } else {
         bpReabilitarBotaoEnvio(formFolga);
       }
-    });
+    }));
   }
 
   renderizarCalendario();
@@ -3016,6 +3644,25 @@ function iniciarValidacaoFormularios() {
  * botão fica travado (desabilitado, com spinner) para sempre em caso de
  * erro — ex.: senha errada no login, e-mail já cadastrado.
  */
+/**
+ * Garante que o botão "Enviando…" volte ao normal quando a ação do formulário
+ * termina, DÊ CERTO OU NÃO (e mesmo se der exceção). Antes, só os caminhos de
+ * erro devolviam o botão; no sucesso ele ficava travado em "Enviando…" para
+ * sempre (era o carregamento infinito ao marcar uma folga). Usado nos
+ * formulários que continuam na mesma página depois de salvar. Nos de login,
+ * cadastro e edição de perfil o sucesso redireciona a página, então o botão
+ * fica bloqueado de propósito para impedir clique duplo.
+ */
+function bpEnvioSeguro(form, acao) {
+  return async (ev) => {
+    try {
+      return await acao(ev);
+    } finally {
+      bpReabilitarBotaoEnvio(form);
+    }
+  };
+}
+
 function bpReabilitarBotaoEnvio(form) {
   const btn = form?.querySelector('button[type="submit"]');
   if (btn && btn.dataset.textoOriginal) {
@@ -3058,6 +3705,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   iniciarValidacaoFormularios();
   iniciarAncorasInternas();
   iniciarIndicadorOffline();
+  iniciarAvisoPedidosEquipe();
 
   // CTA "Fazer login / Criar Conta" da Home: só faz sentido pra quem ainda
   // não tem sessão — some assim que já está logado.
@@ -3136,6 +3784,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // "Barbearia · Cidade, UF" acompanha o endereço cadastrado
   if (document.getElementById('heroLocalidade')) {
     aplicarRotuloLocalidade();
+  }
+  if (document.getElementById('faixaValores')) {
+    iniciarFaixaValores();
   }
   if (document.getElementById('btnAlterarBanner')) {
     iniciarUploadBanner();
@@ -3331,6 +3982,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Editar Perfil (formEditarPerfil)
   const formEditarPerfil = document.getElementById('formEditarPerfil');
   if (formEditarPerfil) {
+    // O campo "Senha atual" só aparece quando o usuário mexe no e-mail ou na senha.
+    const grupoSenhaAtual = document.getElementById('grupoSenhaAtual');
+    const atualizarCampoSenhaAtual = async () => {
+      const atual = await window.db.getSessao();
+      const mudou = Boolean(document.getElementById('editarSenha').value)
+        || (atual && document.getElementById('editarEmail').value.trim().toLowerCase() !== atual.email.toLowerCase());
+      grupoSenhaAtual?.classList.toggle('d-none', !mudou);
+    };
+    ['editarEmail', 'editarSenha'].forEach(id => document.getElementById(id)?.addEventListener('input', atualizarCampoSenhaAtual));
     formEditarPerfil.addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const nome = document.getElementById('editarNome').value.trim();
@@ -3351,6 +4011,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const avatarPreview = document.getElementById('editarAvatarPreview');
       const avatarBase64 = avatarPreview ? avatarPreview.dataset.base64 : null;
+      const senhaAtual = document.getElementById('editarSenhaAtual')?.value || '';
 
       // Guarda os dados de ANTES da troca para permitir "Desfazer". Só
       // nome e e-mail são revertidos — senha (nunca lida em texto puro de
@@ -3358,7 +4019,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       // fora do desfazer por não terem como ser reconstruídos com segurança.
       const sessaoAntes = await window.db.getSessao();
 
-      const sucesso = await window.db.atualizarPerfil(nome, email, senha, avatarBase64);
+      // Trocar e-mail ou senha pede a senha atual (o servidor também exige).
+      const trocaCredencial = Boolean(senha) || (sessaoAntes && email.toLowerCase() !== sessaoAntes.email.toLowerCase());
+      if (trocaCredencial && !senhaAtual) {
+        mostrarToast('Informe a sua senha atual para trocar o e-mail ou a senha.', 'erro');
+        document.getElementById('editarSenhaAtual')?.focus();
+        bpReabilitarBotaoEnvio(formEditarPerfil);
+        return;
+      }
+
+      const sucesso = await window.db.atualizarPerfil(nome, email, senha, avatarBase64, senhaAtual);
       if (sucesso) {
         let desfeito = false;
         const redirecionar = () => { window.location.href = 'perfil.html'; };
@@ -3368,7 +4038,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           mostrarToastComDesfazer('Dados salvos com sucesso.', 'sucesso', async () => {
             desfeito = true;
             clearTimeout(timer);
-            await window.db.atualizarPerfil(sessaoAntes.nome, sessaoAntes.email, '', null);
+            await window.db.atualizarPerfil(sessaoAntes.nome, sessaoAntes.email, '', null, senhaAtual);
             mostrarToast('Alteração desfeita.', 'sucesso');
             redirecionar();
           }, 5000);

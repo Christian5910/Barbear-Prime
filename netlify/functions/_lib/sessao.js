@@ -40,7 +40,9 @@ function montarCookieExpirado() {
 function lerTokenDoCookie(event) {
   const cabecalho = event.headers?.cookie || event.headers?.Cookie || '';
   const par = cabecalho.split(';').map(s => s.trim()).find(s => s.startsWith(`${NOME_COOKIE}=`));
-  return par ? par.split('=')[1] : null;
+  const valor = par ? par.slice(NOME_COOKIE.length + 1) : null;
+  // O token é sempre 64 caracteres hexadecimais; qualquer outra coisa nem vai ao banco.
+  return valor && /^[a-f0-9]{64}$/.test(valor) ? valor : null;
 }
 
 /**
@@ -72,7 +74,7 @@ async function getUsuarioDaSessao(event) {
   const sql = getSql();
   const tokenHash = hashToken(tokenBruto);
   const linhas = await sql`
-    SELECT u.id, u.nome, u.email, u.papel, u.avatar_url, u.ativo, u.master
+    SELECT u.id, u.nome, u.email, u.papel, u.avatar_url, u.ativo, u.master, u.master_raiz, u.pode_criar_barbeiros
     FROM sessoes s
     JOIN usuarios u ON u.id = s.usuario_id
     WHERE s.token_hash = ${tokenHash} AND s.expira_em > now() AND u.ativo = TRUE
@@ -91,7 +93,14 @@ async function encerrarSessao(event) {
   return montarCookieExpirado();
 }
 
+/** Hash do token da sessão desta requisição (para preservar só ela ao invalidar as outras). */
+function tokenHashDaRequisicao(event) {
+  const bruto = lerTokenDoCookie(event);
+  return bruto ? hashToken(bruto) : null;
+}
+
 module.exports = {
+  tokenHashDaRequisicao,
   criarSessao,
   getUsuarioDaSessao,
   encerrarSessao,

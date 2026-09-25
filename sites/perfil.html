@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#1A1613">
 <link rel="apple-touch-icon" href="../assets/img/icon-192.png">
 <link rel="icon" href="../assets/img/icon-192.png">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <link rel="stylesheet" href="../assets/css/style.css">
 <script>!function(){var t=sessionStorage.getItem("bp-tema"),e=sessionStorage.getItem("bp-escala-fonte");t&&document.documentElement.setAttribute("data-tema",t);e&&document.documentElement.style.setProperty("--escala-fonte",e);}();</script>
@@ -48,7 +48,7 @@
 
       <!-- Avatar com o botão da engrenagem acoplado -->
       <div class="avatar-wrapper mb-3">
-        <img class="avatar-circular img-carregando" id="perfilAvatar" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Foto de perfil" onerror="this.onerror=null;this.src='../assets/img/avatar-exemplo.jpg'">
+        <img class="avatar-circular img-carregando" id="perfilAvatar" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Foto de perfil" data-fallback-src="../assets/img/avatar-exemplo.jpg">
         <a href="editar-perfil.html" class="btn-config-perfil" title="Editar dados" aria-label="Editar dados do perfil">
           <i class="bi bi-gear-fill"></i>
         </a>
@@ -64,13 +64,26 @@
         <p class="fw-semibold mb-2 skeleton skeleton-linha" id="perfilEmail">&nbsp;</p>
       </div>
 
-      <div class="card-prime p-3 text-start mx-auto mt-3" id="perfilProximoAgendamentoCard" style="max-width:320px;">
+      <div class="card-prime p-3 text-start mx-auto mt-3 d-none" id="perfilProximoAgendamentoCard" data-visivel-para="cliente" style="max-width:320px;">
         <p class="small texto-suave mb-1 text-uppercase fw-bold">Próximo agendamento</p>
         <p class="mb-0 fw-semibold" id="perfilProximoAgendamento">Carregando...</p>
       </div>
 
-      <!-- Ações exclusivas de conta de CLIENTE -->
-      <div class="d-flex flex-column gap-2 mx-auto mt-4" id="perfilAcoesCliente" style="max-width:320px;">
+      <!--
+        Uma única página de perfil, com seções por nível de conta. Tudo que
+        depende do papel começa ESCONDIDO (d-none) e só é mostrado depois que
+        o servidor confirma quem está logado: cliente, barbeiro (comum) ou
+        barbeiro master. Esconder aqui é só organização da tela; quem manda
+        de verdade é o servidor, que recusa (403) qualquer ação que o nível
+        da conta não permita, mesmo que alguém reative os botões pelo
+        navegador.
+        Atenção: o Bootstrap usa "d-flex { display:flex !important }", que
+        vence um style="display:none" comum. Por isso o controle é feito com
+        a classe d-none, nunca com style inline.
+      -->
+
+      <!-- CLIENTE -->
+      <div class="d-none flex-column gap-2 mx-auto mt-4" id="perfilAcoesCliente" data-visivel-para="cliente" data-exibir-como="flex" style="max-width:320px;">
         <a href="preferencias-corte.html" class="btn-outline-prime d-flex justify-content-between align-items-center">
           Preferências de Corte <i class="bi bi-chevron-right"></i>
         </a>
@@ -79,17 +92,36 @@
         </a>
       </div>
 
-      <!-- Ações exclusivas de conta de EQUIPE (barbeiro) -->
-      <div class="d-flex flex-column gap-2 mx-auto mt-4" id="perfilAcoesEquipe" style="max-width:320px; display:none;">
+      <!-- BARBEIRO (comum e master) -->
+      <div class="d-none flex-column gap-2 mx-auto mt-4" id="perfilAcoesEquipe" data-visivel-para="equipe" data-exibir-como="flex" style="max-width:320px;">
         <a href="painel-barbeiro.html" class="btn-outline-prime d-flex justify-content-between align-items-center">
           Ir para o Painel <i class="bi bi-chevron-right"></i>
         </a>
-        <a href="localizacao.html" class="btn-outline-prime d-flex justify-content-between align-items-center" id="linkAlterarLocalizacao" style="display:none;">
+        <a href="localizacao.html" class="btn-outline-prime d-none justify-content-between align-items-center" id="linkAlterarLocalizacao" data-visivel-para="master" data-exibir-como="flex">
           Alterar Localização <i class="bi bi-chevron-right"></i>
         </a>
-        <button type="button" class="btn-outline-prime d-flex justify-content-between align-items-center" id="btnCriarContaBarbeiro" style="display:none;" data-bs-toggle="modal" data-bs-target="#modalCriarBarbeiro">
+        <button type="button" class="btn-outline-prime d-none justify-content-between align-items-center" id="btnCriarContaBarbeiro" data-bs-toggle="modal" data-bs-target="#modalCriarBarbeiro" data-exibir-como="flex">
           Criar conta de barbeiro <i class="bi bi-person-plus"></i>
         </button>
+      </div>
+
+      <!-- BARBEIRO COMUM: pedir permissão para criar barbeiros -->
+      <div class="card-prime p-3 text-start mx-auto mt-3 d-none" id="cartaoPermissaoBarbeiro" data-visivel-para="barbeiro-comum" style="max-width:320px;">
+        <p class="small texto-suave mb-1 text-uppercase fw-bold">Criar contas de barbeiro</p>
+        <p class="small mb-2" id="textoPermissaoBarbeiro">Verificando...</p>
+        <button type="button" class="btn-outline-prime w-100 d-none" id="btnSolicitarPermissao">Pedir permissão a um master</button>
+      </div>
+
+      <!-- MASTER: pedidos de permissão e equipe -->
+      <div class="card-prime p-3 text-start mx-auto mt-3 d-none" id="cartaoEquipe" data-visivel-para="master" style="max-width:420px;">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <h3 class="fs-6 fw-bold m-0">Equipe e permissões</h3>
+          <span class="selo-contador d-none" id="seloPedidosEquipe" aria-label="Pedidos aguardando resposta">0</span>
+        </div>
+        <p class="small texto-suave mb-3">Barbeiros comuns só criam outros barbeiros comuns se um master permitir. Eles pedem aqui e você aprova ou nega.</p>
+        <div id="listaPedidosEquipe" class="mb-3"></div>
+        <p class="small texto-suave mb-1 text-uppercase fw-bold">Equipe</p>
+        <div id="listaMembrosEquipe"><p class="small texto-suave mb-0">Carregando...</p></div>
       </div>
 
       <div class="d-flex justify-content-center gap-4 mt-4">
@@ -106,7 +138,7 @@
       <a href="perfil.html" class="nav-item" data-nav="perfil"><i class="bi bi-person"></i><span>Perfil</span></a>
       <a href="preferencias-app.html" class="nav-item" data-nav="config"><i class="bi bi-gear"></i><span>Ajustes</span></a>
     </nav>
-    <footer class="rodape-site">© 2026 Barbear Prime. Todos os direitos reservados.</footer>
+    <footer class="rodape-site">© <span data-ano-rodape>2026</span> Barbear Prime. Todos os direitos reservados.</footer>
   </div>
 </div>
 
@@ -123,28 +155,90 @@
           <p class="texto-suave small mb-3">O nome e a foto de perfil desta conta ficam disponíveis para os clientes escolherem na hora de agendar. Seu colega já pode entrar com a senha combinada assim que a conta for criada.</p>
           <div class="mb-3">
             <label for="novoBarbeiroNome" class="form-label small fw-semibold">Nome</label>
-            <input type="text" class="input-prime" id="novoBarbeiroNome" placeholder="Nome do barbeiro" required>
+            <input type="text" class="input-prime" id="novoBarbeiroNome" placeholder="Nome do barbeiro" required maxlength="80">
           </div>
           <div class="mb-3">
             <label for="novoBarbeiroEmail" class="form-label small fw-semibold">E-mail de acesso</label>
-            <input type="email" class="input-prime" id="novoBarbeiroEmail" placeholder="email@barbearprime.com" required>
+            <input type="email" class="input-prime" id="novoBarbeiroEmail" placeholder="email@barbearprime.com" required maxlength="190">
           </div>
-          <div class="mb-1">
+          <div class="mb-3">
             <label for="novoBarbeiroSenha" class="form-label small fw-semibold">Senha</label>
-            <input type="password" class="input-prime" id="novoBarbeiroSenha" placeholder="Mínimo 6 caracteres" required minlength="6">
+            <input type="password" class="input-prime" id="novoBarbeiroSenha" placeholder="Mínimo 6 caracteres" required minlength="6" maxlength="128" autocomplete="new-password">
           </div>
+
+          <!-- Tipo de conta: só quem é master escolhe. Barbeiro comum com permissão só cria barbeiro comum. -->
+          <fieldset class="mb-1 d-none" id="grupoTipoBarbeiro" data-visivel-para="master">
+            <legend class="form-label small fw-semibold d-flex align-items-center gap-2 float-none mb-2">
+              Tipo de conta
+              <button type="button" class="btn btn-outline-secondary btn-ajuda" id="btnAjudaTipos" aria-label="Entenda a diferença entre barbeiro comum e master">?</button>
+            </legend>
+            <label class="opcao-tipo mb-2">
+              <input class="form-check-input mt-1" type="radio" name="tipoBarbeiro" value="comum" checked>
+              <span><strong>Barbeiro comum</strong> <span class="badge text-bg-light text-dark ms-1">padrão</span><br><span class="small texto-suave">Cuida só da própria agenda. Interações limitadas.</span></span>
+            </label>
+            <label class="opcao-tipo opcao-tipo-master">
+              <input class="form-check-input mt-1" type="radio" name="tipoBarbeiro" value="master">
+              <span><strong>Barbeiro master</strong><br><span class="small texto-suave">Controle total da barbearia. Só para quem você confia de verdade.</span></span>
+            </label>
+          </fieldset>
+          <p class="small texto-suave mb-0 d-none" id="avisoSoBarbeiroComum">Como você não é master, esta conta será de barbeiro comum.</p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn-outline-prime" data-bs-dismiss="modal">Cancelar</button>
           <button type="submit" class="btn-prime text-center">Criar conta</button>
         </div>
       </form>
+
+      <!-- Pop-up dentro do pop-up 1: explicação da diferença (opcional, fecha no X ou em "Entendi") -->
+      <div class="popup-interno" id="popupExplicaTipos" hidden role="dialog" aria-modal="true" aria-labelledby="popupExplicaTiposTitulo">
+        <div class="popup-interno-caixa">
+          <h3 class="fs-6 fw-bold mb-3" id="popupExplicaTiposTitulo">Barbeiro comum ou master?</h3>
+          <p class="small mb-1"><strong>Barbeiro comum</strong></p>
+          <ul class="small mb-3 ps-3">
+            <li>Vê e gerencia só a própria agenda e as próprias folgas.</li>
+            <li>Não altera serviços, endereço, capa nem os destaques da Home.</li>
+            <li>Só cria outros barbeiros comuns se um master permitir.</li>
+          </ul>
+          <p class="small mb-1"><strong>Barbeiro master</strong></p>
+          <ul class="small mb-3 ps-3">
+            <li>Tudo o que o comum faz, mais: criar e editar serviços, mudar endereço, capa e destaques.</li>
+            <li>Cria outros barbeiros, inclusive outros masters.</li>
+            <li>Decide os pedidos de permissão da equipe.</li>
+          </ul>
+          <button type="button" class="btn-prime w-100" id="btnFecharAjudaTipos">Entendi</button>
+        </div>
+      </div>
+
+      <!-- Pop-up dentro do pop-up 2: aviso OBRIGATÓRIO ao criar um master -->
+      <div class="popup-interno" id="popupRiscoMaster" hidden role="alertdialog" aria-modal="true" aria-labelledby="popupRiscoMasterTitulo" aria-describedby="popupRiscoMasterTexto">
+        <div class="popup-interno-caixa popup-interno-risco">
+          <h3 class="fs-6 fw-bold mb-2 text-danger" id="popupRiscoMasterTitulo"><i class="bi bi-exclamation-triangle-fill me-1"></i> Atenção: você vai criar um master</h3>
+          <div id="popupRiscoMasterTexto" class="small">
+            <p class="mb-2">Um barbeiro master tem o mesmo poder que você sobre a barbearia. Quem for master poderá:</p>
+            <ul class="ps-3 mb-2">
+              <li>apagar ou alterar todos os serviços e preços;</li>
+              <li>trocar o endereço, a capa e os destaques da Home;</li>
+              <li>criar novos barbeiros e novos masters;</li>
+              <li>aprovar ou negar pedidos de permissão da equipe.</li>
+            </ul>
+            <p class="mb-2">Só o master principal consegue rebaixar um master depois. <strong>Crie um master somente se você confia totalmente nesta pessoa.</strong> Na dúvida, crie um barbeiro comum.</p>
+          </div>
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="checkRiscoMaster">
+            <label class="form-check-label small" for="checkRiscoMaster">Entendo os riscos e confio nesta pessoa.</label>
+          </div>
+          <div class="d-flex gap-2 flex-column flex-sm-row">
+            <button type="button" class="btn-outline-prime w-100" id="btnCancelarRiscoMaster">Voltar</button>
+            <button type="button" class="btn-prime w-100" id="btnConfirmarRiscoMaster" disabled>Criar master</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 <script src="../database/db.js" defer></script>
 <script src="../assets/src/ui.js" defer></script>
 </body>

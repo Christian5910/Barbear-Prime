@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#1A1613">
 <link rel="apple-touch-icon" href="../assets/img/icon-192.png">
 <link rel="icon" href="../assets/img/icon-192.png">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <link rel="stylesheet" href="../assets/css/style.css">
 <script>!function(){var t=sessionStorage.getItem("bp-tema"),e=sessionStorage.getItem("bp-escala-fonte");t&&document.documentElement.setAttribute("data-tema",t);e&&document.documentElement.style.setProperty("--escala-fonte",e);}();</script>
@@ -53,11 +53,11 @@
 
         <div class="hero-desktop">
           <div class="position-relative">
-            <img class="capa-barbearia img-carregando" id="capaBarbeariaImg" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Foto da barbearia Barbear Prime" onerror="this.style.display='none'">
+            <img class="capa-barbearia img-carregando" id="capaBarbeariaImg" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Foto da barbearia Barbear Prime" data-ocultar-em-erro>
             <button type="button" class="btn btn-sm btn-light position-absolute top-0 end-0 m-2" id="btnAlterarBanner" title="Alterar foto de capa" aria-label="Alterar foto de capa">
               <i class="bi bi-pencil-fill"></i>
             </button>
-            <input type="file" id="inputBannerBarbearia" accept="image/*" class="visually-hidden" aria-hidden="true">
+            <input type="file" id="inputBannerBarbearia" accept="image/png,image/jpeg,image/webp,image/gif" class="visually-hidden" aria-hidden="true">
           </div>
           <div>
             <p class="texto-dourado fw-bold text-uppercase small mb-2" style="letter-spacing:.08em;" id="heroLocalidade">Barbearia</p>
@@ -70,10 +70,14 @@
           </div>
         </div>
 
-        <div class="faixa-valores">
-          <div class="item-valor"><i class="bi bi-award d-block mb-2"></i><strong>Desde 2016</strong><p class="texto-suave small mb-0">Barbearia de tradição na região</p></div>
-          <div class="item-valor"><i class="bi bi-scissors d-block mb-2"></i><strong>Equipe experiente</strong><p class="texto-suave small mb-0">Cortes clássicos e modernos</p></div>
-          <div class="item-valor"><i class="bi bi-star d-block mb-2"></i><strong>Acabamento na navalha</strong><p class="texto-suave small mb-0">Detalhe impecável em todo serviço</p></div>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="fs-6 fw-bold m-0">Destaques da Home</h2>
+          <button type="button" class="btn btn-sm btn-outline-prime d-none" id="btnEditarFaixa" data-bs-toggle="modal" data-bs-target="#modalFaixa" data-visivel-para="master"><i class="bi bi-pencil-square me-1"></i> Editar textos</button>
+        </div>
+        <div class="faixa-valores" id="faixaValores">
+          <div class="item-valor"><i class="bi bi-award d-block mb-2"></i><strong class="skeleton skeleton-linha d-block mx-auto" data-faixa-titulo>&nbsp;</strong><p class="texto-suave small mb-0 skeleton skeleton-linha mx-auto mt-1" data-faixa-texto>&nbsp;</p></div>
+          <div class="item-valor"><i class="bi bi-scissors d-block mb-2"></i><strong class="skeleton skeleton-linha d-block mx-auto" data-faixa-titulo>&nbsp;</strong><p class="texto-suave small mb-0 skeleton skeleton-linha mx-auto mt-1" data-faixa-texto>&nbsp;</p></div>
+          <div class="item-valor"><i class="bi bi-star d-block mb-2"></i><strong class="skeleton skeleton-linha d-block mx-auto" data-faixa-titulo>&nbsp;</strong><p class="texto-suave small mb-0 skeleton skeleton-linha mx-auto mt-1" data-faixa-texto>&nbsp;</p></div>
         </div>
 
         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -145,17 +149,50 @@
         </div>
         <div class="modal-body">
           <div class="mb-3 text-center">
-            <img id="previewEscolhaBanner" src="" alt="Pré-visualização da nova foto de capa" style="max-width:100%; max-height:220px; border-radius:var(--raio); object-fit:contain; background:#000;">
+            <img id="previewEscolhaBanner" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Pré-visualização da nova foto de capa" style="max-width:100%; max-height:200px; border-radius:var(--raio); object-fit:contain; background:#000;">
+            <p class="small texto-suave mt-1 mb-0" id="infoEscolhaBanner"></p>
           </div>
-          <p class="small texto-suave mb-0">
-            <strong>Cortar para o padrão da página (recomendado)</strong> preenche toda a faixa de capa em qualquer tela, cortando as bordas que sobrarem.
-            <strong>Manter proporção original</strong> mostra a foto inteira, sem cortar nada, mas pode sobrar uma faixa preta nas laterais em telas mais largas.
-          </p>
+          <div class="d-flex flex-column gap-2" id="opcoesBanner">
+            <button type="button" class="btn-outline-prime text-start" data-banner-modo="padrao">
+              <strong>Padrão do site</strong> <span class="badge text-bg-light text-dark ms-1">recomendado</span><br>
+              <span class="small texto-suave">Mesmo formato do <em>capa-barbearia.jpg</em>. Você ajusta o enquadramento e a foto preenche a faixa em qualquer tela.</span>
+            </button>
+            <button type="button" class="btn-outline-prime text-start" data-banner-modo="proporcao">
+              <strong>Proporção original</strong><br>
+              <span class="small texto-suave">Mostra a foto inteira, do jeito que ela é, sem cortar nada.</span>
+            </button>
+            <button type="button" class="btn-outline-prime text-start" data-banner-modo="recorte">
+              <strong>Cortar como eu quiser</strong><br>
+              <span class="small texto-suave">Você define quanto cortar de cada lado (esquerda, direita, topo e base).</span>
+            </button>
+            <button type="button" class="btn-outline-prime text-start" data-banner-modo="tamanho-original">
+              <strong>Tamanho original</strong><br>
+              <span class="small texto-suave">Usa a foto nos pixels reais, centralizada, sem esticar. Em telas menores ela é reduzida para caber.</span>
+            </button>
+          </div>
         </div>
-        <div class="modal-footer flex-column flex-sm-row">
-          <button type="button" class="btn-outline-prime w-100" id="btnBannerManterProporcao">Manter proporção original</button>
-          <button type="button" class="btn-prime w-100" id="btnBannerCortar">Cortar para o padrão <span class="badge text-bg-light text-dark ms-1">recomendado</span></button>
-        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: editar os destaques logo abaixo da capa da Home (só master) -->
+  <div class="modal fade" id="modalFaixa" tabindex="-1" aria-labelledby="modalFaixaTitulo" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content modal-prime">
+        <form id="formFaixa" novalidate>
+          <div class="modal-header">
+            <h2 class="modal-title fs-5 fonte-display" id="modalFaixaTitulo">Destaques da Home</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <p class="small texto-suave">São os três blocos que aparecem logo abaixo da capa. Os ícones são fixos; os textos você escolhe.</p>
+            <div id="camposFaixa"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-outline-prime" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn-prime text-center">Salvar</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
@@ -167,11 +204,11 @@
       <a href="perfil.html" class="nav-item" data-nav="perfil"><i class="bi bi-person"></i><span>Perfil</span></a>
       <a href="preferencias-app.html" class="nav-item" data-nav="config"><i class="bi bi-gear"></i><span>Ajustes</span></a>
     </nav>
-    <footer class="rodape-site">© 2026 Barbear Prime. Todos os direitos reservados.</footer>
+    <footer class="rodape-site">© <span data-ano-rodape>2026</span> Barbear Prime. Todos os direitos reservados.</footer>
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 <script src="../database/db.js" defer></script>
 <script src="../assets/src/ui.js" defer></script>
 </body>

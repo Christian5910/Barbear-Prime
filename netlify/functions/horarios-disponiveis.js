@@ -7,10 +7,10 @@
  * (ou de todos, se barbeiroId não for informado — compatibilidade).
  */
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, comProtecao } = require('./_lib/http');
 const { slotsNecessarios, calcularDisponibilidade, horariosBloqueadosNoDia } = require('./_lib/horarios');
 
-exports.handler = async (event) => {
+exports.handler = comProtecao(async (event) => {
   if (event.httpMethod !== 'GET') return metodoNaoPermitido(['GET']);
 
   const { data, servicoIds, barbeiroId } = event.queryStringParameters || {};
@@ -51,4 +51,4 @@ exports.handler = async (event) => {
   const horarios = calcularDisponibilidade(data, [...horariosOcupados, ...horariosBloqueados], qtdSlots);
 
   return json(200, { horarios, slotsNecessarios: qtdSlots });
-};
+});

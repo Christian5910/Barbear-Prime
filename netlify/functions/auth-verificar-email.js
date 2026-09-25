@@ -9,10 +9,10 @@
  * qualquer forma, já que a conta já está verificada).
  */
 const { getSql } = require('./_lib/db');
-const { json, erro, metodoNaoPermitido, corpoJson } = require('./_lib/http');
+const { json, erro, metodoNaoPermitido, corpoJson, comProtecao } = require('./_lib/http');
 const { hashToken } = require('./_lib/tokens');
 
-exports.handler = async (event) => {
+exports.handler = comProtecao(async (event) => {
   if (event.httpMethod !== 'POST') return metodoNaoPermitido(['POST']);
 
   const dados = corpoJson(event);
@@ -47,4 +47,4 @@ exports.handler = async (event) => {
   await sql`DELETE FROM verificacoes_email WHERE usuario_id = ${linha.usuario_id}`;
 
   return json(200, { ok: true, mensagem: 'E-mail confirmado!' });
-};
+});

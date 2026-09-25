@@ -4,9 +4,9 @@
  * usada na etapa "Escolha o barbeiro" do agendamento do cliente.
  */
 const { getSql } = require('./_lib/db');
-const { json, metodoNaoPermitido } = require('./_lib/http');
+const { json, metodoNaoPermitido, comProtecao } = require('./_lib/http');
 
-exports.handler = async (event) => {
+exports.handler = comProtecao(async (event) => {
   if (event.httpMethod !== 'GET') return metodoNaoPermitido(['GET']);
 
   const sql = getSql();
@@ -24,4 +24,4 @@ exports.handler = async (event) => {
   }));
 
   return json(200, { barbeiros });
-};
+});

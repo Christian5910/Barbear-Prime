@@ -80,7 +80,14 @@
 html { -webkit-tap-highlight-color: transparent; scroll-behavior: smooth; }
 
 [id] { scroll-margin-top: 84px; }
-html, body { overflow-x: hidden; max-width: 100%; }
+/* IMPORTANTE: overflow-x:hidden no html E no body transforma o body num
+   "container de rolagem" próprio, e aí o cabeçalho sticky deixa de grudar
+   no topo da janela (ele passa a ser posicionado em relação ao body, que
+   nunca rola). Por isso o body usa "clip", que corta o excedente sem criar
+   container de rolagem; o "hidden" logo antes é só reserva para navegadores
+   antigos que não conhecem "clip". */
+html { overflow-x: hidden; max-width: 100%; }
+body { overflow-x: hidden; overflow-x: clip; max-width: 100%; }
 
 /* ============================================================================
   Acessibilidade — foco visível e alvo mínimo de toque
@@ -229,9 +236,10 @@ html.nav-pronta .menu-hamburguer-conteudo {
   align-items: center;
   gap: clamp(10px, 2vw, 20px);
   padding: clamp(12px, 2vw, 18px) clamp(16px, 4vw, 32px);
+  /* Cabeçalho fixo: acompanha a rolagem em qualquer tela. */
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 40;
   flex-wrap: nowrap;
 }
 
@@ -432,7 +440,11 @@ html.nav-pronta .menu-hamburguer-conteudo {
      de baixo + o texto de copyright). Valor generoso de propósito — o
      objetivo é sempre sobrar uma margem visível entre o último elemento
      da página e o rodapé, mesmo em telas com bastante conteúdo. */
-  padding-bottom: clamp(150px, 18vw, 180px);
+  /* --altura-rodape é medida pelo JavaScript (iniciarMargemRodape em
+     ui.js) e acompanha o rodapé real: com ou sem a barra de navegação
+     inferior, com fonte grande, em qualquer largura de tela. O valor
+     reserva é usado só até o script rodar. */
+  padding-bottom: calc(var(--altura-rodape, 120px) + 32px);
   animation: entrada-tela .32s ease both;
 }
 
@@ -528,7 +540,6 @@ html.nav-pronta .menu-hamburguer-conteudo {
    texto de copyright. */
 @media (min-width: 840px) {
   .nav-inferior { display: none; }
-  .tela-conteudo { padding-bottom: 32px; }
 }
 
 /* ============================================================================
@@ -1393,3 +1404,109 @@ img.img-carregando {
   max-width: 320px;
   min-height: 1.3em;
 }
+
+
+/* ==========================================================================
+   CÍRCULOS SEMPRE CIRCULARES
+   ========================================================================== */
+/* Um elemento redondo só é círculo se largura e altura forem iguais. Botões
+   e avatares viravam "ovais" quando o texto/ícone ou o zoom do navegador
+   empurrava só uma das medidas. aspect-ratio 1/1 trava a proporção e o
+   flex-shrink:0 impede que uma linha flex os espremar. */
+.rounded-circle,
+.avatar-circular,
+.btn-config-perfil {
+  aspect-ratio: 1 / 1;
+  flex-shrink: 0;
+}
+.btn.rounded-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+
+/* ==========================================================================
+   POP-UP DENTRO DE POP-UP (explicações e avisos obrigatórios)
+   ========================================================================== */
+/* Camada colocada por cima do conteúdo do modal aberto. Não usa um segundo
+   modal do Bootstrap (dois modais empilhados travam o foco e a rolagem). */
+.modal-content { position: relative; }
+.popup-interno {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(20, 15, 8, .72);
+  border-radius: inherit;
+}
+.popup-interno[hidden] { display: none; }
+.popup-interno-caixa {
+  background: var(--bg-card, #fff);
+  color: var(--texto, #241c11);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 18px;
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .35);
+}
+.popup-interno-risco { border-color: #b3261e; border-width: 2px; }
+
+/* Seleção de tipo de barbeiro (comum / master) */
+.opcao-tipo {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  cursor: pointer;
+}
+.opcao-tipo:has(input:checked) { border-color: var(--cor-dourado, #c9a876); background: rgba(201, 168, 118, .14); }
+.opcao-tipo-master:has(input:checked) { border-color: #b3261e; background: rgba(179, 38, 30, .08); }
+
+/* Botão "?" que abre a explicação */
+.btn-ajuda {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  aspect-ratio: 1 / 1;
+  font-size: .8rem;
+  line-height: 1;
+}
+
+/* Crachá de pedidos pendentes */
+.selo-contador {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #b3261e;
+  color: #fff;
+  font-size: .75rem;
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   CAPA DA HOME — os 4 modos escolhidos pelo barbeiro master
+   ========================================================================== */
+/* proporcao: a imagem inteira, na proporção dela (sem cortar). */
+.capa-barbearia.banner-modo-proporcao,
+.capa-barbearia.banner-modo-recorte { width: 100%; height: auto; max-height: none; aspect-ratio: auto; object-fit: contain; }
+/* tamanho-original: pixels reais, centralizada, sem esticar (nunca passa da largura da tela). */
+.capa-barbearia.banner-modo-tamanho-original { width: auto; max-width: 100%; height: auto; max-height: none; aspect-ratio: auto; margin-inline: auto; display: block; object-fit: none; }
+/* padrao: o mesmo formato do capa-barbearia.jpg (1600x1056), com corte central se preciso. */
+.capa-barbearia.banner-modo-padrao { width: 100%; height: auto; aspect-ratio: 1600 / 1056; max-height: none; object-fit: cover; }
