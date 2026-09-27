@@ -1426,7 +1426,24 @@ async function iniciarLocalizacao() {
   const mapaWrap = document.getElementById('mapaLocalizacaoWrap');
 
   async function preencherExibicao() {
-    const endereco = await window.db.getEnderecoBarbearia();
+    // Sem isso, uma falha de rede ou do servidor (ex.: instabilidade
+    // momentânea na API) travava a página inteira num "Uncaught (in
+    // promise)" — o esqueleto de carregamento ficava preso pra sempre e o
+    // restante da função (inclusive os controles de edição do master, mais
+    // abaixo) nunca chegava a rodar. Agora qualquer visitante — logado ou
+    // não — vê uma mensagem clara em vez de uma tela quebrada, e o master
+    // ainda consegue editar mesmo se só a leitura falhou.
+    let endereco;
+    try {
+      endereco = await window.db.getEnderecoBarbearia();
+    } catch (e) {
+      console.error(e);
+      preencherTextoCarregado(linha1El, 'Não foi possível carregar o endereço agora. Atualize a página em instantes.');
+      preencherTextoCarregado(linha2El, '');
+      if (mapaWrap) { mapaWrap.classList.remove('skeleton'); mapaWrap.style.display = 'none'; }
+      if (blocosDisplay) blocosDisplay.innerHTML = '';
+      return null;
+    }
     // Nada aqui é texto fixo do HTML: tudo vem do banco. Se o master ainda
     // não cadastrou o endereço, a linha 1 avisa em vez de ficar vazia.
     preencherTextoCarregado(linha1El, endereco.linha1 || 'Endereço ainda não cadastrado.');

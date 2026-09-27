@@ -108,14 +108,32 @@
 #                Bootstrap ajusta estilos por JavaScript.
 #   img-src      o próprio site, data:/blob: (prévia e recorte de imagem) e o
 #                ImageKit (fotos enviadas).
-#   connect-src  a API do próprio site e o ViaCEP (busca de endereço por CEP).
+#   connect-src  a API do próprio site, o ViaCEP (busca de endereço por CEP)
+#                e TODO domínio externo de onde o site carrega algum arquivo
+#                — veja o aviso abaixo, é mais amplo do que parece à primeira vista.
 #   frame-src    o mapa do Google na página de Localização.
-# Se um dia trocar de provedor de imagem ou adicionar outro serviço externo,
-# inclua o endereço dele na linha certa, senão o navegador vai bloquear.
+#
+# ATENÇÃO — pegadinha do connect-src com Service Worker: o sw.js intercepta
+# QUALQUER requisição GET que não seja /api/... (função iniciada em
+# "self.addEventListener('fetch', ...)") para poder cachear e servir offline.
+# Para isso, ele mesmo chama fetch(request) por dentro. O navegador aplica
+# connect-src a QUALQUER fetch() feito por código JavaScript — inclusive
+# esse, dentro do Service Worker — mesmo quando o recurso pedido originalmente
+# era um <link rel="stylesheet">, uma fonte de @font-face ou uma <img>, que
+# em circunstância normal (sem Service Worker) seriam avaliados por
+# style-src/font-src/img-src, não por connect-src. Na prática isso quer dizer
+# que TODO domínio de onde o site carrega algo (Bootstrap, Google Fonts,
+# ImageKit) precisa estar em connect-src também, ou o Service Worker faz o
+# navegador bloquear o próprio carregamento — foi exatamente isso que quebrou
+# o visual do site (Bootstrap, ícones e fontes pararam de carregar).
+# Se um dia trocar de provedor de imagem/fonte ou adicionar outro serviço
+# externo (script, CSS, imagem, fonte — qualquer coisa que passa por um GET),
+# inclua o endereço dele tanto na diretiva "certa" (script-src/style-src/...)
+# quanto em connect-src, senão o navegador vai bloquear pelo Service Worker.
 [[headers]]
   for = "/*"
   [headers.values]
-    Content-Security-Policy = "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'sha256-x3iAZkBi31h9Iz2DRpgEWLRTWxho7vbpoUmn5mwye3s='; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob: https://ik.imagekit.io; media-src 'self' blob: data: https://ik.imagekit.io; connect-src 'self' https://viacep.com.br; frame-src https://www.google.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'sha256-x3iAZkBi31h9Iz2DRpgEWLRTWxho7vbpoUmn5mwye3s='; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob: https://ik.imagekit.io; media-src 'self' blob: data: https://ik.imagekit.io; connect-src 'self' https://viacep.com.br https://cdn.jsdelivr.net https://fonts.googleapis.com https://fonts.gstatic.com https://ik.imagekit.io; frame-src https://www.google.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
     X-Content-Type-Options = "nosniff"
     X-Frame-Options = "DENY"
     Referrer-Policy = "strict-origin-when-cross-origin"

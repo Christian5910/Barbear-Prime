@@ -31,7 +31,6 @@ Thumbs.db
 .vscode/
 .idea/
 
-
 # --- Documentação interna sensível --------------------------------------------
 # A pasta MARKDOWN/ documenta, em detalhe, TODAS as vulnerabilidades já
 # encontradas neste projeto — como cada uma funcionava, como foi explorada,
