@@ -79,7 +79,7 @@ ON CONFLICT (usuario_id) DO UPDATE SET
 INSERT INTO config_app (chave, valor) VALUES
   ('banner_barbearia_url', '/assets/img/capa-barbearia.jpg'),
   ('banner_barbearia_ajuste', 'padrao'),
-  ('home_faixa_valores', '[{"titulo":"Desde 2016","texto":"Barbearia de tradição na região"},{"titulo":"Equipe experiente","texto":"Cortes clássicos e modernos"},{"titulo":"Acabamento na navalha","texto":"Detalhe impecável em todo serviço"}]'),
+  ('home_faixa_valores', '[{"titulo":"Desde 2016","texto":"Barbearia de tradição na região","icone":null,"iconeBootstrap":"bi-award","formato":"quadrado"},{"titulo":"Equipe experiente","texto":"Cortes clássicos e modernos","icone":null,"iconeBootstrap":"bi-scissors","formato":"quadrado"},{"titulo":"Acabamento na navalha","texto":"Detalhe impecável em todo serviço","icone":null,"iconeBootstrap":"bi-star","formato":"quadrado"}]'),
   ('endereco_linha1', 'Rua dos Berimbau Duros, Nº666'),
   ('endereco_linha2', 'Bairro dos Perus, Xique-Xique, BA'),
   ('endereco_cep', ''),

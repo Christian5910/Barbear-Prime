@@ -613,6 +613,7 @@ const TAMANHOS_IMAGEM_CDN = {
   cartaoBarbeiro: { largura: 120, altura: 120, foco: 'auto' }, // .cartao-barbeiro img: 56px
   avatarPerfil: { largura: 200, altura: 200, foco: 'auto' },   // .avatar-circular: 96px (80px no mobile)
   iconeInfo: { largura: 60, altura: 60, foco: 'auto' },        // .bloco-info-icone-img/.preview: ~28-30px
+  iconeDestaque: { largura: 120, altura: 120, foco: 'auto' },   // .destaque-icone-img: 48px (2x para telas de alta densidade)
   banner: { largura: 1600 },                                    // .capa-barbearia: largura total, até 420px de altura
 };
 
@@ -1472,7 +1473,7 @@ async function iniciarLocalizacao() {
   /* ---------------------- editor de blocos (adicionar/remover/ícone) ---------------------- */
   function novaLinhaBloco(bloco) {
     const linha = document.createElement('div');
-    linha.className = 'd-flex align-items-center gap-2';
+    linha.className = 'd-flex flex-wrap align-items-center gap-2';
     linha.dataset.blocoIcone = bloco.icone || '';
     linha.dataset.blocoIconeBootstrap = iconeBootstrapSeguro(bloco.iconeBootstrap);
     linha.dataset.blocoFormato = bloco.formato === 'circulo' ? 'circulo' : 'quadrado';
@@ -1481,12 +1482,13 @@ async function iniciarLocalizacao() {
       <img src="${bloco.icone ? escaparHtml(resolverAsset(bloco.icone, undefined, TAMANHOS_IMAGEM_CDN.iconeInfo)) : ''}" alt="" class="bloco-info-icone-preview${classeFormatoInicial}" data-bloco-preview style="${bloco.icone ? '' : 'display:none;'}">
       <i class="bi ${iconeBootstrapSeguro(bloco.iconeBootstrap)} fs-4 texto-dourado" data-bloco-preview-padrao style="${bloco.icone ? 'display:none;' : ''}"></i>
       <input type="text" class="input-prime flex-grow-1" value="${escaparHtml(bloco.texto || '')}" placeholder="Ex.: Aceita cartão" data-bloco-texto>
-      <button type="button" class="btn btn-sm btn-outline-secondary px-2" title="Alternar entre quadrado e círculo" data-bloco-alternar-formato>
-        <i class="bi ${linha.dataset.blocoFormato === 'circulo' ? 'bi-circle' : 'bi-square'}"></i>
-      </button>
+      <div class="form-check form-switch form-switch-prime m-0 ps-0 d-flex align-items-center gap-2" title="${bloco.icone ? 'Ligada: ícone redondo. Desligada: ícone quadrado.' : 'Envie uma imagem para poder escolher o formato.'}">
+        <input class="form-check-input m-0" type="checkbox" role="switch" id="blocoRedondo${++seqEditorDestaque}" data-bloco-formato-switch ${linha.dataset.blocoFormato === 'circulo' ? 'checked' : ''} ${bloco.icone ? '' : 'disabled'}>
+        <label class="form-check-label small" for="blocoRedondo${seqEditorDestaque}">Ícone redondo</label>
+      </div>
       <label class="btn-outline-prime mb-0 px-2 py-1" title="Trocar ícone" style="cursor:pointer;">
         <i class="bi bi-image"></i>
-        <input type="file" accept="image/*" class="visually-hidden" data-bloco-icone-input>
+        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="visually-hidden" data-bloco-icone-input>
       </label>
       <button type="button" class="btn btn-sm text-danger" title="Remover" data-bloco-remover><i class="bi bi-trash3"></i></button>
     `;
@@ -1507,12 +1509,12 @@ async function iniciarLocalizacao() {
       preview.src = recorte;
       preview.style.display = '';
       previewPadrao.style.display = 'none';
+      linha.querySelector('[data-bloco-formato-switch]').disabled = false; // agora há imagem para ganhar formato
     });
-    linha.querySelector('[data-bloco-alternar-formato]').addEventListener('click', (ev) => {
-      const novoFormato = linha.dataset.blocoFormato === 'circulo' ? 'quadrado' : 'circulo';
-      linha.dataset.blocoFormato = novoFormato;
-      linha.querySelector('[data-bloco-preview]').classList.toggle('formato-circulo', novoFormato === 'circulo');
-      ev.currentTarget.querySelector('i').className = novoFormato === 'circulo' ? 'bi bi-circle' : 'bi bi-square';
+    linha.querySelector('[data-bloco-formato-switch]').addEventListener('change', (ev) => {
+      const redondo = ev.target.checked;
+      linha.dataset.blocoFormato = redondo ? 'circulo' : 'quadrado';
+      linha.querySelector('[data-bloco-preview]').classList.toggle('formato-circulo', redondo);
     });
     linha.querySelector('[data-bloco-remover]').addEventListener('click', () => linha.remove());
     return linha;
@@ -1767,72 +1769,221 @@ async function iniciarUploadBanner() {
 /* ==========================================================================
    DESTAQUES DA HOME (a faixa "Desde 2016 ...") — vêm do banco e o master edita
    ========================================================================== */
+// Mesma lógica dos blocos de informação da Localização (ícone enviado com
+// recorte, formato quadrado/redondo, adicionar e remover), com título e
+// descrição. A quantidade de cards é livre (até MAX_DESTAQUES) e as colunas
+// se ajustam a ela: ver colunasDaFaixa() e a regra .faixa-valores no CSS.
+const MAX_DESTAQUES = 6;
+const ICONES_DESTAQUE_PADRAO = ['bi-award', 'bi-scissors', 'bi-star', 'bi-patch-check', 'bi-heart', 'bi-gem'];
+
+/** Colunas no computador: 1 card = 1 coluna, 2 = 2, 3 = 3, 4 = 4; 5 ou 6 = 3 por linha. */
+function colunasDaFaixa(quantidade) {
+  if (!quantidade || quantidade < 1) return 1;
+  return quantidade <= 4 ? quantidade : 3;
+}
+
+/** Ícone padrão (Bootstrap) do destaque: o salvo, ou um por posição para bancos que ainda não têm esse campo. */
+function iconeBootstrapDoDestaque(item, indice) {
+  return iconeBootstrapSeguro(item?.iconeBootstrap || ICONES_DESTAQUE_PADRAO[indice] || 'bi-star');
+}
+
+function htmlIconeDestaque(item, indice) {
+  if (item?.icone) {
+    const circulo = item.formato === 'circulo' ? ' formato-circulo' : '';
+    return `<img src="${escaparHtml(resolverAsset(item.icone, undefined, TAMANHOS_IMAGEM_CDN.iconeDestaque))}" alt="" class="destaque-icone-img${circulo}">`;
+  }
+  return `<i class="bi ${iconeBootstrapDoDestaque(item, indice)}" aria-hidden="true"></i>`;
+}
+
+function htmlItemDestaque(item, indice) {
+  const texto = item.texto ? `<p class="texto-suave small mb-0 mt-1">${escaparHtml(item.texto)}</p>` : '';
+  return `<div class="item-valor">${htmlIconeDestaque(item, indice)}<div class="item-valor-texto"><strong>${escaparHtml(item.titulo)}</strong>${texto}</div></div>`;
+}
+
+/** Desenha os cards e ajusta as colunas à quantidade. Devolve quantos foram desenhados. */
+function renderizarFaixaValores(faixa, lista) {
+  const itens = (Array.isArray(lista) ? lista : []).filter(i => i && i.titulo);
+  faixa.dataset.qtd = String(itens.length);
+  faixa.style.setProperty('--colunas', String(colunasDaFaixa(itens.length)));
+  faixa.innerHTML = itens.map((item, i) => htmlItemDestaque(item, i)).join('');
+  faixa.removeAttribute('aria-busy');
+  return itens.length;
+}
+
+let seqEditorDestaque = 0;
+
 async function iniciarFaixaValores() {
   const faixa = document.getElementById('faixaValores');
   if (!faixa || !window.db?.getFaixaValores) return;
 
-  const itensEl = [...faixa.querySelectorAll('.item-valor')];
   let itens = null;
   try { itens = await window.db.getFaixaValores(); } catch (e) { itens = null; }
-
-  function preencher(lista) {
-    itensEl.forEach((el, i) => {
-      const dado = lista?.[i];
-      const tit = el.querySelector('[data-faixa-titulo]');
-      const txt = el.querySelector('[data-faixa-texto]');
-      const existe = Boolean(dado?.titulo);
-      el.classList.toggle('d-none', !existe);
-      if (existe) {
-        preencherTextoCarregado(tit, dado.titulo);
-        preencherTextoCarregado(txt, dado.texto || '');
-        tit.classList.remove('d-block', 'mx-auto');
-        txt.classList.toggle('d-none', !dado.texto);
-      }
-    });
-    // Sem nenhum destaque cadastrado: a faixa some (na Home); no Painel
-    // continua visível para o master poder cadastrar.
-    const algum = (lista || []).some(d => d?.titulo);
-    if (!algum && !document.getElementById('btnEditarFaixa')) faixa.classList.add('d-none');
-  }
-  preencher(itens);
+  const quantidade = renderizarFaixaValores(faixa, itens);
+  // Nada cadastrado: a faixa some da Home. No Painel, o master a reexibe
+  // logo abaixo (com um aviso) para poder cadastrar.
+  if (!quantidade) faixa.classList.add('d-none');
 
   // ---- edição (só master, no Painel do Barbeiro)
   const btnEditar = document.getElementById('btnEditarFaixa');
   const form = document.getElementById('formFaixa');
   const campos = document.getElementById('camposFaixa');
-  if (!btnEditar || !form || !campos) return;
+  const btnAdicionar = document.getElementById('btnAdicionarDestaque');
+  const contador = document.getElementById('contadorDestaques');
+  const modalEl = document.getElementById('modalFaixa');
+  if (!btnEditar || !form || !campos || !modalEl) return;
   const sessao = await getSessaoAtual();
-  if (!sessao?.master) return; // continua d-none
+  if (!sessao?.master) return; // botão continua escondido
   mostrarElemento(btnEditar, true);
 
-  const ICONES = ['bi-award', 'bi-scissors', 'bi-star'];
-  function montarCampos() {
-    campos.innerHTML = itensEl.map((_, i) => `
-      <div class="mb-3 pb-2 border-bottom">
-        <p class="small fw-bold mb-2"><i class="bi ${ICONES[i]} me-1"></i> Destaque ${i + 1}</p>
-        <label class="form-label small" for="faixaTitulo${i}">Título</label>
-        <input type="text" class="input-prime mb-2" id="faixaTitulo${i}" maxlength="40" value="${escaparHtml(itens?.[i]?.titulo || '')}">
-        <label class="form-label small" for="faixaTexto${i}">Descrição</label>
-        <input type="text" class="input-prime" id="faixaTexto${i}" maxlength="90" value="${escaparHtml(itens?.[i]?.texto || '')}">
-      </div>`).join('');
+  function mostrarParaMaster(qtd) {
+    faixa.classList.remove('d-none');
+    if (!qtd) {
+      faixa.dataset.qtd = '0';
+      faixa.style.setProperty('--colunas', '1');
+      faixa.innerHTML = '<p class="small texto-suave text-center mb-0 py-3">Nenhum destaque cadastrado. Use “Editar destaques” para adicionar.</p>';
+    }
   }
-  document.getElementById('modalFaixa')?.addEventListener('show.bs.modal', montarCampos);
+  mostrarParaMaster(quantidade);
+
+  function atualizarEstadoEditor() {
+    const total = campos.children.length;
+    if (contador) contador.textContent = `${total} de ${MAX_DESTAQUES} destaques`;
+    if (btnAdicionar) btnAdicionar.disabled = total >= MAX_DESTAQUES;
+  }
+
+  function atualizarDica(linha) {
+    const dica = linha.querySelector('[data-destaque-dica]');
+    const chave = linha.querySelector('[data-destaque-redondo]');
+    if (chave.disabled) {
+      dica.textContent = 'Envie uma imagem para poder escolher o formato. Enquanto não houver imagem, o ícone padrão é usado.';
+    } else {
+      dica.textContent = 'Chave ligada: o ícone fica redondo. Chave desligada: o ícone fica quadrado.';
+    }
+    linha.querySelector('[data-destaque-formato-texto]').textContent = linha.dataset.formato === 'circulo' ? 'Redondo' : 'Quadrado';
+  }
+
+  function novaLinhaDestaque(item, indice) {
+    const id = ++seqEditorDestaque;
+    const linha = document.createElement('div');
+    linha.className = 'destaque-editor-linha';
+    linha.dataset.icone = item.icone || '';
+    linha.dataset.iconeBootstrap = iconeBootstrapDoDestaque(item, indice);
+    linha.dataset.formato = item.formato === 'circulo' ? 'circulo' : 'quadrado';
+    const redondo = linha.dataset.formato === 'circulo';
+    const temImagem = Boolean(item.icone);
+    linha.innerHTML = `
+      <div class="d-flex align-items-start gap-3 mb-2">
+        <div class="flex-shrink-0 d-flex align-items-center justify-content-center" style="width:48px;height:48px;">
+          <img alt="" class="destaque-icone-img${redondo ? ' formato-circulo' : ''}" data-destaque-preview src="${temImagem ? escaparHtml(resolverAsset(item.icone, undefined, TAMANHOS_IMAGEM_CDN.iconeDestaque)) : PIXEL_TRANSPARENTE}" style="${temImagem ? '' : 'display:none;'}">
+          <i class="bi ${linha.dataset.iconeBootstrap} fs-3 texto-dourado" data-destaque-preview-padrao style="${temImagem ? 'display:none;' : ''}" aria-hidden="true"></i>
+        </div>
+        <div class="flex-grow-1" style="min-width:0;">
+          <label class="form-label small mb-1" for="destaqueTitulo${id}">Título</label>
+          <input type="text" class="input-prime" id="destaqueTitulo${id}" maxlength="40" value="${escaparHtml(item.titulo || '')}" placeholder="Ex.: Desde 2016" data-destaque-titulo>
+        </div>
+        <button type="button" class="btn btn-sm text-danger" title="Remover este destaque" aria-label="Remover este destaque" data-destaque-remover><i class="bi bi-trash3"></i></button>
+      </div>
+      <label class="form-label small mb-1" for="destaqueTexto${id}">Descrição</label>
+      <input type="text" class="input-prime mb-3" id="destaqueTexto${id}" maxlength="90" value="${escaparHtml(item.texto || '')}" placeholder="Ex.: Barbearia de tradição na região" data-destaque-texto>
+      <div class="d-flex flex-wrap align-items-center gap-3">
+        <label class="btn-outline-prime mb-0 px-3 py-1 d-inline-flex align-items-center gap-1" style="cursor:pointer;">
+          <i class="bi bi-image"></i> Enviar ícone
+          <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="visually-hidden" data-destaque-arquivo>
+        </label>
+        <div class="form-check form-switch form-switch-prime m-0 ps-0 d-flex align-items-center gap-2">
+          <input class="form-check-input m-0" type="checkbox" role="switch" id="destaqueRedondo${id}" data-destaque-redondo ${redondo ? 'checked' : ''} ${temImagem ? '' : 'disabled'}>
+          <label class="form-check-label small" for="destaqueRedondo${id}">Formato do ícone: <strong data-destaque-formato-texto></strong></label>
+        </div>
+      </div>
+      <p class="small texto-suave mb-0 mt-2" data-destaque-dica></p>`;
+
+    const previa = linha.querySelector('[data-destaque-preview]');
+    const previaPadrao = linha.querySelector('[data-destaque-preview-padrao]');
+    const chave = linha.querySelector('[data-destaque-redondo]');
+
+    chave.addEventListener('change', () => {
+      linha.dataset.formato = chave.checked ? 'circulo' : 'quadrado';
+      previa.classList.toggle('formato-circulo', chave.checked);
+      atualizarDica(linha);
+    });
+
+    linha.querySelector('[data-destaque-arquivo]').addEventListener('change', async (ev) => {
+      const arquivo = ev.target.files[0];
+      ev.target.value = '';
+      if (!arquivo) return;
+      const recorte = await abrirEditorRecorte(arquivo, {
+        proporcao: 1,
+        larguraSaida: 240,
+        circular: linha.dataset.formato === 'circulo',
+        formatoSaida: 'image/png',
+      });
+      if (!recorte) return; // cancelado no editor
+      linha.dataset.novoIcone = recorte;
+      previa.src = recorte;
+      previa.style.display = '';
+      previaPadrao.style.display = 'none';
+      chave.disabled = false; // agora existe uma imagem para ganhar formato
+      atualizarDica(linha);
+    });
+
+    linha.querySelector('[data-destaque-remover]').addEventListener('click', () => {
+      linha.remove();
+      atualizarEstadoEditor();
+    });
+
+    atualizarDica(linha);
+    return linha;
+  }
+
+  modalEl.addEventListener('show.bs.modal', () => {
+    form.classList.remove('was-validated');
+    campos.replaceChildren(...(itens || []).filter(i => i && i.titulo).map((item, i) => novaLinhaDestaque(item, i)));
+    atualizarEstadoEditor();
+  });
+
+  btnAdicionar?.addEventListener('click', () => {
+    if (campos.children.length >= MAX_DESTAQUES) {
+      mostrarToast(`O máximo é de ${MAX_DESTAQUES} destaques.`, 'erro');
+      return;
+    }
+    const linha = novaLinhaDestaque({ titulo: '', texto: '', icone: null }, campos.children.length);
+    campos.appendChild(linha);
+    atualizarEstadoEditor();
+    linha.querySelector('[data-destaque-titulo]').focus();
+  });
 
   form.addEventListener('submit', bpEnvioSeguro(form, async (ev) => {
     ev.preventDefault();
-    const novos = itensEl.map((_, i) => ({
-      titulo: document.getElementById(`faixaTitulo${i}`).value.trim(),
-      texto: document.getElementById(`faixaTexto${i}`).value.trim(),
-    })).filter(d => d.titulo);
-    if (!novos.length) {
-      mostrarToast('Preencha pelo menos um título.', 'erro');
-      return;
+    const novos = [];
+    for (const linha of Array.from(campos.children)) {
+      const campoTitulo = linha.querySelector('[data-destaque-titulo]');
+      const titulo = campoTitulo.value.trim();
+      const texto = linha.querySelector('[data-destaque-texto]').value.trim();
+      if (!titulo) {
+        if (texto || linha.dataset.novoIcone) {
+          mostrarToast('Todo destaque precisa de um título.', 'erro');
+          campoTitulo.focus();
+          return;
+        }
+        continue; // linha totalmente vazia: ignora em vez de salvar um card vazio
+      }
+      let icone = linha.dataset.icone || null;
+      if (linha.dataset.novoIcone) {
+        const url = await window.db.enviarIconeInfoLocalizacao(linha.dataset.novoIcone);
+        if (!url) {
+          mostrarToast('Não foi possível enviar um dos ícones. Nada foi salvo; tente de novo.', 'erro');
+          return;
+        }
+        icone = url;
+      }
+      novos.push({ titulo, texto, icone, iconeBootstrap: linha.dataset.iconeBootstrap, formato: linha.dataset.formato });
     }
     const ok = await window.db.salvarFaixaValores(novos);
     if (ok === false) return;
     itens = novos;
-    preencher(novos);
-    window.bootstrap?.Modal.getInstance(document.getElementById('modalFaixa'))?.hide();
+    const qtd = renderizarFaixaValores(faixa, novos);
+    mostrarParaMaster(qtd);
+    window.bootstrap?.Modal.getInstance(modalEl)?.hide();
     mostrarToast('Destaques atualizados.', 'sucesso');
   }));
 }
@@ -2622,6 +2773,7 @@ function iniciarCriarContaBarbeiro() {
     fecharPopup(popupRisco);
     if (checkRisco) { checkRisco.checked = false; btnConfirmarRisco.disabled = true; }
     form.reset();
+    form.classList.remove('was-validated');
     bpReabilitarBotaoEnvio(form);
   });
 
@@ -2752,17 +2904,20 @@ async function renderizarEquipeMaster(sessao) {
   const euSouRaiz = Boolean(sessao.masterRaiz);
   listaMembros.innerHTML = (dados.membros || []).map((m) => {
     const ehEu = String(m.id) === String(sessao.usuarioId);
-    const etiqueta = m.masterRaiz ? 'Master principal' : (m.master ? 'Master' : 'Barbeiro');
+    const etiqueta = m.masterRaiz ? 'Master principal' : (m.master ? 'Master' : 'Barbeiro comum');
     let acao = '';
     if (!m.master) {
-      acao = `<div class="form-check form-switch m-0" title="Pode criar barbeiros comuns">
-          <input class="form-check-input" type="checkbox" data-permissao-de="${escaparHtml(m.id)}" ${m.podeCriarBarbeiros ? 'checked' : ''} aria-label="${escaparHtml(m.nome)} pode criar barbeiros">
+      acao = `<div class="d-flex align-items-center gap-2 flex-shrink-0">
+          <label class="small texto-suave text-end mb-0" for="permissao-${escaparHtml(m.id)}">Pode criar<br>barbeiros</label>
+          <div class="form-check form-switch form-switch-prime m-0 p-0">
+            <input class="form-check-input m-0" type="checkbox" role="switch" id="permissao-${escaparHtml(m.id)}" data-permissao-de="${escaparHtml(m.id)}" ${m.podeCriarBarbeiros ? 'checked' : ''}>
+          </div>
         </div>`;
     } else if (euSouRaiz && !m.masterRaiz && !ehEu) {
       acao = `<button type="button" class="btn btn-sm btn-outline-danger" data-rebaixar="${escaparHtml(m.id)}">Rebaixar</button>`;
     }
     return `<div class="d-flex align-items-center gap-2 py-2 border-bottom">
-        <div class="flex-grow-1 small"><strong>${escaparHtml(m.nome)}</strong>${ehEu ? ' (você)' : ''}<br><span class="texto-suave">${etiqueta}${!m.master && m.podeCriarBarbeiros ? ' · pode criar barbeiros' : ''}</span></div>
+        <div class="flex-grow-1 small"><strong>${escaparHtml(m.nome)}</strong>${ehEu ? ' (você)' : ''}<br><span class="texto-suave">${etiqueta}${!m.master ? (m.podeCriarBarbeiros ? ' · pode criar barbeiros comuns' : ' · não pode criar barbeiros') : ''}</span></div>
         ${acao}
       </div>`;
   }).join('');

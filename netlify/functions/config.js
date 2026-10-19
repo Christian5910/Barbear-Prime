@@ -31,6 +31,7 @@ const CHAVES_PERMITIDAS = [
 // entope o banco com textos gigantes.
 const AJUSTES_BANNER = ['proporcao', 'recorte', 'tamanho-original', 'padrao'];
 const MAX_TEXTO_CURTO = 200;
+const MAX_DESTAQUES = 6; // mesma constante do front-end (assets/src/ui.js)
 
 function textoLimpo(valor, max, rotulo) {
   const t = String(valor ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
@@ -80,13 +81,24 @@ function validarValorDaChave(chave, valor) {
     return JSON.stringify(normalizados);
   }
   if (chave === 'home_faixa_valores') {
-    const itens = lerJsonLista(valor, 'home_faixa_valores', 3);
+    // Mesmo formato dos blocos da Localização (ícone enviado ou ícone padrão,
+    // formato quadrado/redondo), mais título e descrição. Até 6 destaques.
+    const itens = lerJsonLista(valor, 'home_faixa_valores', MAX_DESTAQUES);
     return JSON.stringify(itens.map((i) => {
       if (!i || typeof i !== 'object') throw new Error('Item de destaque inválido.');
       const titulo = textoLimpo(i.titulo, 40, 'Título');
       const texto = textoLimpo(i.texto, 90, 'Descrição');
       if (!titulo) throw new Error('Cada destaque precisa de um título.');
-      return { titulo, texto };
+      const iconeBootstrap = i.iconeBootstrap ? String(i.iconeBootstrap) : 'bi-star';
+      // vira classe CSS no HTML: só o padrão dos ícones do Bootstrap
+      if (!/^bi-[a-z0-9-]{1,40}$/.test(iconeBootstrap)) throw new Error('Ícone inválido.');
+      return {
+        titulo,
+        texto,
+        icone: i.icone ? normalizarUrlImagem(i.icone, 'ícone') : null,
+        iconeBootstrap,
+        formato: i.formato === 'circulo' ? 'circulo' : 'quadrado',
+      };
     }));
   }
   // endereco_*: texto simples com teto

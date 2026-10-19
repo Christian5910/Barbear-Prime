@@ -54,3 +54,4 @@ DEPLOY.md
 # no reset do banco). É uma ferramenta SÓ sua, para rodar na sua máquina, e não
 # faz parte do site. Fica fora do Git para nunca ser publicada por acidente.
 gerar-hash.js
+reset-postgresql.sql
